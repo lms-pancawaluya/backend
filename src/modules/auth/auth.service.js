@@ -2,6 +2,7 @@
 
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const prisma = require('../../config/database')
 
 // ================================================
 // REGISTER — Daftarkan user baru
@@ -9,20 +10,35 @@ const jwt = require('jsonwebtoken')
 const register = async (data) => {
   const { nama, email, password } = data
 
-  // 1. Hash password sebelum disimpan ke database
-  // Angka 10 = "salt rounds" — makin tinggi makin aman tapi makin lambat
-  // 10 adalah nilai yang direkomendasikan untuk keseimbangan keamanan & kecepatan
+  // 1. Cek apakah email sudah terdaftar
+  const emailSudahAda = await prisma.user.findUnique({
+    where: { email }
+  })
+
+  if (emailSudahAda) {
+    throw new Error('Email sudah terdaftar')
+  }
+
+  // 2. Hash password
   const hashedPassword = await bcrypt.hash(password, 10)
 
-  // 2. Simpan user baru ke database
-  // CATATAN: Bagian ini akan kita lengkapi setelah Prisma siap
-  // Untuk sekarang kita return data dulu tanpa database
-  const userBaru = {
-    nama,
-    email,
-    password: hashedPassword,
-    role: 'guru' // default role saat register adalah guru
-  }
+  // 3. Simpan user baru ke database
+  const userBaru = await prisma.user.create({
+    data: {
+      nama,
+      email,
+      password: hashedPassword,
+      role: 'guru'
+    },
+    // Pilih field yang dikembalikan — jangan kembalikan password!
+    select: {
+      id: true,
+      nama: true,
+      email: true,
+      role: true,
+      createdAt: true
+    }
+  })
 
   return userBaru
 }
@@ -33,55 +49,46 @@ const register = async (data) => {
 const login = async (data) => {
   const { email, password } = data
 
-  // CATATAN: Bagian pencarian user dari database
-  // akan kita lengkapi setelah Prisma siap
-  // Untuk sekarang kita simulasi dulu
+  // 1. Cari user berdasarkan email
+  const user = await prisma.user.findUnique({
+    where: { email }
+  })
 
-  // Simulasi user yang ditemukan di database
-  const userDitemukan = {
-    id: 1,
-    nama: 'Contoh Guru',
-    email: email,
-    // Ini adalah hash dari password "rahasia123"
-    password: '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
-    role: 'guru'
-  }
-
-  // 1. Cek apakah password yang diinput cocok dengan hash di database
-  const passwordCocok = await bcrypt.compare(password, userDitemukan.password)
-
-  if (!passwordCocok) {
-    // Lempar error kalau password salah
-    // Error ini akan ditangkap oleh controller
+  // 2. Kalau user tidak ditemukan
+  if (!user) {
     throw new Error('Email atau password salah')
   }
 
-  // 2. Buat JWT token
+  // 3. Verifikasi password
+  const passwordCocok = await bcrypt.compare(password, user.password)
+
+  if (!passwordCocok) {
+    throw new Error('Email atau password salah')
+  }
+
+  // 4. Buat JWT token
   const token = jwt.sign(
-    // Payload — data yang disimpan di dalam token
     {
-      id: userDitemukan.id,
-      email: userDitemukan.email,
-      role: userDitemukan.role
+      id: user.id,
+      email: user.email,
+      role: user.role
     },
-    // Secret key — dari file .env
     process.env.JWT_SECRET,
-    // Options
     {
       expiresIn: process.env.JWT_EXPIRES_IN || '7d'
     }
   )
 
-  // 3. Return token & data user (tanpa password!)
+  // 5. Return token & data user (tanpa password!)
   return {
     token,
     user: {
-      id: userDitemukan.id,
-      nama: userDitemukan.nama,
-      email: userDitemukan.email,
-      role: userDitemukan.role
+      id: user.id,
+      nama: user.nama,
+      email: user.email,
+      role: user.role
     }
   }
 }
 
-module.exports = { register, login }    
+module.exports = { register, login }

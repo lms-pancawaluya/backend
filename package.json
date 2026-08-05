@@ -24,9 +24,15 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "helmet": "^8.3.0",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "@prisma/client": "^5.22.0",
+    "express": "^5.2.1",
+    "prisma": "^5.22.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }

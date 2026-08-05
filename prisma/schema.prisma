@@ -1,0 +1,161 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS (Daftar Pilihan Tetap)
+// ==========================================
+
+enum Role {
+  admin
+  guru
+}
+
+enum AspekPancawaluya {
+  cageur
+  bageur
+  bener
+  pinter
+  singer
+}
+
+enum ContentType {
+  teks
+  video
+}
+
+enum QuestionType {
+  pilihan_ganda
+  esai
+}
+
+enum ProgressStatus {
+  belum_mulai
+  sedang_belajar
+  selesai
+}
+
+// ==========================================
+// TABEL DATABASE (MODELS)
+// ==========================================
+
+model User {
+  id        String   @id @default(uuid())
+  nama      String
+  email     String   @unique
+  password  String
+  role      Role     @default(guru)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relasi ke tabel lain
+  progress user_progress[]
+  answers  user_answers[]
+
+  @@map("users")
+}
+
+model Module {
+  id               String           @id @default(uuid())
+  judul            String
+  deskripsi        String           @db.Text
+  aspekPancawaluya AspekPancawaluya @map("aspek_pancawaluya")
+  urutan           Int
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  // Relasi ke tabel lain
+  contents    Content[]
+  evaluations Evaluation[]
+  progress    user_progress[]
+
+  @@map("modules")
+}
+
+model Content {
+  id        String      @id @default(uuid())
+  moduleId  String      @map("module_id")
+  judul     String
+  tipe      ContentType
+  konten    String      @db.Text
+  urutan    Int
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  // Relasi balik ke Module
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@map("contents")
+}
+
+model Evaluation {
+  id        String   @id @default(uuid())
+  moduleId  String   @map("module_id")
+  judul     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relasi balik ke Module
+  module    Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@map("evaluations")
+}
+
+model Question {
+  id           String       @id @default(uuid())
+  evaluationId String       @map("evaluation_id")
+  pertanyaan   String       @db.Text
+  tipe         QuestionType
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  // Relasi
+  evaluation Evaluation   @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  options    Option[]
+  answers    user_answers[]
+
+  @@map("questions")
+}
+
+model Option {
+  id         String   @id @default(uuid())
+  questionId String   @map("question_id")
+  teksOpsi   String   @map("teks_opsi") @db.Text
+  isCorrect  Boolean  @default(false) @map("is_correct")
+
+  // Relasi
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("options")
+}
+
+model user_progress {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  moduleId    String         @map("module_id")
+  status      ProgressStatus @default(belum_mulai)
+  completedAt DateTime?      @map("completed_at")
+
+  // Relasi
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, moduleId])
+  @@map("user_progress")
+}
+
+model user_answers {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  questionId String   @map("question_id")
+  jawaban    String   @db.Text
+  isCorrect  Boolean? @map("is_correct")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relasi
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("user_answers")
+}

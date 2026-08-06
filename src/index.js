@@ -2,12 +2,14 @@
 
 const app = require('./config/app')
 const authRoute = require('./modules/auth/auth.route')
+const usersRoute = require('./modules/users/users.route')
 
 const PORT = process.env.PORT || 3000
 
 // ===== DAFTARKAN SEMUA ROUTE =====
 // Semua route auth akan diawali dengan /api/auth
 app.use('/api/auth', authRoute)
+app.use('/api/users', usersRoute)
 
 // Jalankan server
 app.listen(PORT, () => {

@@ -32,7 +32,7 @@ const register = async (req, res) => {
       return res.status(400).json({
         sukses: false,
         pesan: 'Password minimal 8 karakter'
-      })
+      }) 
     }
 
     // 5. Panggil service untuk proses register

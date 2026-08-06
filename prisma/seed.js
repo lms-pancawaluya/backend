@@ -1,37 +1,48 @@
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+// prisma/seed.js
+
+const { PrismaClient } = require('@prisma/client')
+const bcrypt = require('bcryptjs')
+
+const prisma = new PrismaClient()
 
 async function main() {
-  console.log('Memulai proses seeding data...');
+  console.log('Memulai proses seeding data...')
 
-  // 1. Seed Data Users (1 Admin & 1 Guru)
+  // Hash password dulu sebelum disimpan
+  const hashedPassword = await bcrypt.hash('password123', 10)
+
+  // 1. Seed Admin
   const admin = await prisma.user.upsert({
     where: { email: 'admin@pancawaluya.sch.id' },
     update: {},
     create: {
       nama: 'Admin LMS',
       email: 'admin@pancawaluya.sch.id',
-      password: 'password123', // Nanti di backend riil di-hash dengan bcrypt
+      password: hashedPassword, // ← pakai hash!
       role: 'admin',
     },
-  });
+  })
 
+  // 2. Seed Guru
   const guru = await prisma.user.upsert({
     where: { email: 'guru@sma.sch.id' },
     update: {},
     create: {
       nama: 'Budi Santoso, S.Pd.',
       email: 'guru@sma.sch.id',
-      password: 'password123',
+      password: hashedPassword, // ← pakai hash!
       role: 'guru',
     },
-  });
+  })
 
-  // 2. Seed Data Modul Pancawaluya (5 Aspek)
-  const modulCageur = await prisma.module.create({
-    data: {
-      judul: 'Modul 1: Cageur (Sehat Fisik & Mental)',
-      deskripsi: 'Memahami pentingnya kesehatan fisik dan mental bagi pendidik dan siswa.',
+  // 3. Seed Modul Cageur
+  const modulCageur = await prisma.module.upsert({
+    where: { id: 'modul-cageur-001' },
+    update: {},
+    create: {
+      id: 'modul-cageur-001',
+      judul: 'Modul 1: Cageur - Sehat Fisik & Mental',
+      deskripsi: 'Memahami pentingnya kesehatan fisik dan mental bagi pendidik dan siswa dalam menerapkan nilai Pancawaluya.',
       aspekPancawaluya: 'cageur',
       urutan: 1,
       contents: {
@@ -39,13 +50,13 @@ async function main() {
           {
             judul: 'Pengantar Cageur',
             tipe: 'teks',
-            konten: 'Konsep Cageur mencakup keseimbangan kesehatan jasmani dan rohani dalam kegiatan mengajar.',
+            konten: 'Konsep Cageur mencakup keseimbangan kesehatan jasmani dan rohani dalam kegiatan mengajar sehari-hari.',
             urutan: 1,
           },
           {
             judul: 'Video Panduan Kesehatan Mental Guru',
             tipe: 'video',
-            konten: 'https://www.youtube.com/watch?dq_example',
+            konten: 'https://www.youtube.com/watch?v=example',
             urutan: 2,
           },
         ],
@@ -63,6 +74,7 @@ async function main() {
                     { teksOpsi: 'Sehat fisik dan mental', isCorrect: true },
                     { teksOpsi: 'Disiplin dan integritas', isCorrect: false },
                     { teksOpsi: 'Kepemimpinan yang responsif', isCorrect: false },
+                    { teksOpsi: 'Percaya diri dan kolaborasi', isCorrect: false },
                   ],
                 },
               },
@@ -75,16 +87,19 @@ async function main() {
         },
       },
     },
-  });
+  })
 
-  console.log('Seeding selesai!');
+  console.log('Seeding selesai!')
+  console.log('Admin:', admin.email)
+  console.log('Guru:', guru.email)
+  console.log('Password untuk semua akun: password123')
 }
 
 main()
   .catch((e) => {
-    console.error('Error saat seeding:', e);
-    process.exit(1);
+    console.error('Error saat seeding:', e)
+    process.exit(1)
   })
   .finally(async () => {
-    await prisma.$disconnect();
-  });
+    await prisma.$disconnect()
+  })

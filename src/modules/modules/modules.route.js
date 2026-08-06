@@ -5,6 +5,12 @@ const router = express.Router()
 const modulesController = require('./modules.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
+const contentsRoute = require('../contents/contents.route')
+
+// ================================================
+// Nested route — contents di dalam modules
+// ================================================
+router.use('/:moduleId/contents', contentsRoute)
 
 // ================================================
 // PUBLIC ROUTES — Semua user yang sudah login

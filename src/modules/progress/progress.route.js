@@ -41,4 +41,10 @@ router.post('/:moduleId/complete',
   progressController.completeModule
 )
 
+// GET progress satu modul spesifik
+router.get('/:moduleId',
+  authMiddleware,
+  progressController.getProgressByModule
+)
+
 module.exports = router

@@ -152,9 +152,43 @@ const completeModule = async (userId, moduleId) => {
   return progress
 }
 
+// ================================================
+// GET PROGRESS BY MODULE — Cek progress satu modul
+// ================================================
+const getProgressByModule = async (userId, moduleId) => {
+  const progress = await prisma.user_progress.findUnique({
+    where: {
+      userId_moduleId: { userId, moduleId }
+    },
+    select: {
+      id: true,
+      status: true,
+      completedAt: true,
+      module: {
+        select: {
+          id: true,
+          judul: true,
+          aspekPancawaluya: true
+        }
+      }
+    }
+  })
+
+  // Kalau belum ada progress, return status belum_mulai
+  if (!progress) {
+    return {
+      status: 'belum_mulai',
+      completedAt: null
+    }
+  }
+
+  return progress
+}
+
 module.exports = {
   getProgress,
   getSummary,
   startModule,
-  completeModule
+  completeModule,
+  getProgressByModule
 }

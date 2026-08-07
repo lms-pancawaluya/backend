@@ -95,9 +95,33 @@ const completeModule = async (req, res) => {
   }
 }
 
+// ================================================
+// GET PROGRESS BY MODULE — Cek progress satu modul
+// ================================================
+const getProgressByModule = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { moduleId } = req.params
+
+    const progress = await progressService.getProgressByModule(userId, moduleId)
+
+    return res.status(200).json({
+      sukses: true,
+      data: progress
+    })
+
+  } catch (error) {
+    return res.status(500).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   getProgress,
   getSummary,
   startModule,
-  completeModule
+  completeModule,
+  getProgressByModule
 }

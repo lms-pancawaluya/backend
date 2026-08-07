@@ -6,11 +6,13 @@ const modulesController = require('./modules.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
 const contentsRoute = require('../contents/contents.route')
+const evaluationsRoute = require('../evaluations/evaluations.route')
 
 // ================================================
 // Nested route — contents di dalam modules
 // ================================================
 router.use('/:moduleId/contents', contentsRoute)
+router.use('/:moduleId/evaluations', evaluationsRoute)
 
 // ================================================
 // PUBLIC ROUTES — Semua user yang sudah login

@@ -14,7 +14,7 @@ app.use(helmet())
 
 // 2. CORS — izinkan frontend akses API ini
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://10.10.21.108:3001',
+  origin: process.env.FRONTEND_URL || 'http://10.10.20.212:3001',
   credentials: true
 }))
 

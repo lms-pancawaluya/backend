@@ -5,6 +5,7 @@ const authRoute = require('./modules/auth/auth.route')
 const usersRoute = require('./modules/users/users.route')
 const modulesRoute = require('./modules/modules/modules.route')
 const contentsRoute = require('./modules/contents/contents.route')
+const evaluationsRoute = require('./modules/evaluations/evaluations.route')
 
 const PORT = process.env.PORT || 3000
 
@@ -14,6 +15,7 @@ app.use('/api/auth', authRoute)
 app.use('/api/users', usersRoute)
 app.use('/api/modules', modulesRoute)
 app.use('/api/contents', contentsRoute)
+app.use('/api/evaluations', evaluationsRoute)
 
 // Jalankan server
 app.listen(PORT, () => {

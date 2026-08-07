@@ -177,10 +177,57 @@ const submitJawaban = async (req, res) => {
   }
 }
 
+// ================================================
+// GET ANSWERS — Admin lihat semua jawaban
+// ================================================
+const getAnswersByEvaluation = async (req, res) => {
+  try {
+    const { id } = req.params
+    const answers = await evaluationsService.getAnswersByEvaluation(id)
+
+    return res.status(200).json({
+      sukses: true,
+      jumlah: answers.length,
+      data: answers
+    })
+
+  } catch (error) {
+    return res.status(404).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
+// GET MY ANSWERS — Guru lihat jawaban sendiri
+// ================================================
+const getMyAnswers = async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user.id
+
+    const hasil = await evaluationsService.getMyAnswers(id, userId)
+
+    return res.status(200).json({
+      sukses: true,
+      data: hasil
+    })
+
+  } catch (error) {
+    return res.status(404).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   getEvaluationsByModule,
   getEvaluationById,
   createEvaluation,
   createQuestion,
-  submitJawaban
+  submitJawaban,
+  getAnswersByEvaluation,
+  getMyAnswers 
 }

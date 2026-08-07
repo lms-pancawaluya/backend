@@ -219,10 +219,109 @@ const submitJawaban = async (evaluationId, userId, data) => {
   }
 }
 
+// ================================================
+// GET ANSWERS — Admin lihat semua jawaban di evaluasi
+// ================================================
+const getAnswersByEvaluation = async (evaluationId) => {
+  const evaluationAda = await prisma.evaluation.findUnique({
+    where: { id: evaluationId }
+  })
+
+  if (!evaluationAda) {
+    throw new Error('Evaluasi tidak ditemukan')
+  }
+
+  const answers = await prisma.user_answers.findMany({
+    where: {
+      question: { evaluationId }
+    },
+    select: {
+      id: true,
+      jawaban: true,
+      isCorrect: true,
+      createdAt: true,
+      user: {
+        select: { id: true, nama: true, email: true }
+      },
+      question: {
+        select: {
+          id: true,
+          pertanyaan: true,
+          tipe: true,
+          options: {
+            select: {
+              id: true,
+              teksOpsi: true,
+              isCorrect: true // Admin boleh lihat jawaban benar
+            }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  return answers
+}
+
+// ================================================
+// GET MY ANSWERS — Guru lihat jawaban dirinya sendiri
+// ================================================
+const getMyAnswers = async (evaluationId, userId) => {
+  const evaluationAda = await prisma.evaluation.findUnique({
+    where: { id: evaluationId }
+  })
+
+  if (!evaluationAda) {
+    throw new Error('Evaluasi tidak ditemukan')
+  }
+
+  const answers = await prisma.user_answers.findMany({
+    where: {
+      userId,
+      question: { evaluationId }
+    },
+    select: {
+      id: true,
+      jawaban: true,
+      isCorrect: true,
+      createdAt: true,
+      question: {
+        select: {
+          id: true,
+          pertanyaan: true,
+          tipe: true,
+          options: {
+            select: {
+              id: true,
+              teksOpsi: true
+              // isCorrect tidak ditampilkan ke guru
+            }
+          }
+        }
+      }
+    }
+  })
+
+  // Hitung skor
+  const soalPG = answers.filter(a => a.isCorrect !== null)
+  const benar = soalPG.filter(a => a.isCorrect === true).length
+  const totalPG = soalPG.length
+
+  return {
+    skor: totalPG > 0 ? Math.round((benar / totalPG) * 100) : 0,
+    benar,
+    totalPilihanGanda: totalPG,
+    jawaban: answers
+  }
+}
+
 module.exports = {
   getEvaluationsByModule,
   getEvaluationById,
   createEvaluation,
   createQuestion,
-  submitJawaban
+  submitJawaban,
+  getAnswersByEvaluation,
+  getMyAnswers 
 }

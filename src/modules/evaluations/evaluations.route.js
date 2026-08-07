@@ -49,4 +49,17 @@ router.post('/:id/submit',
   evaluationsController.submitJawaban
 )
 
+// GET semua jawaban di evaluasi — Hanya admin
+router.get('/:id/answers',
+  authMiddleware,
+  roleMiddleware('admin'),
+  evaluationsController.getAnswersByEvaluation
+)
+
+// GET jawaban saya sendiri — Guru
+router.get('/:id/my-answers',
+  authMiddleware,
+  evaluationsController.getMyAnswers
+)
+
 module.exports = router

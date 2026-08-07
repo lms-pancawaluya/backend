@@ -6,6 +6,7 @@ const usersRoute = require('./modules/users/users.route')
 const modulesRoute = require('./modules/modules/modules.route')
 const contentsRoute = require('./modules/contents/contents.route')
 const evaluationsRoute = require('./modules/evaluations/evaluations.route')
+const progressRoute = require('./modules/progress/progress.route')
 
 const PORT = process.env.PORT || 3000
 
@@ -16,6 +17,7 @@ app.use('/api/users', usersRoute)
 app.use('/api/modules', modulesRoute)
 app.use('/api/contents', contentsRoute)
 app.use('/api/evaluations', evaluationsRoute)
+app.use('/api/progress', progressRoute)
 
 // Jalankan server
 app.listen(PORT, () => {

@@ -44,7 +44,7 @@ router.delete('/items/:id',
 // GET checklist hari ini — Guru
 router.get('/today',
   authMiddleware,
-  roleMiddleware('guru'),
+  roleMiddleware('admin', 'guru'),
   checklistController.getTodayChecklist
 )
 

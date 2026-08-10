@@ -5,6 +5,10 @@ const router = express.Router({ mergeParams: true })
 const contentsController = require('./contents.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
+const miniQuizRoute = require('../mini-quiz/mini-quiz.route')
+
+// Nested route — mini kuis di dalam konten
+router.use('/:contentId/mini-quiz', miniQuizRoute)
 
 // ================================================
 // GET semua konten di modul — Admin & Guru

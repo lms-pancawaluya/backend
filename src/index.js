@@ -8,6 +8,7 @@ const contentsRoute = require('./modules/contents/contents.route')
 const evaluationsRoute = require('./modules/evaluations/evaluations.route')
 const progressRoute = require('./modules/progress/progress.route')
 const checklistRoute = require('./modules/checklist/checklist.route')
+const miniQuizRoute = require('./modules/mini-quiz/mini-quiz.route')
 
 const PORT = process.env.PORT || 3000
 
@@ -20,6 +21,8 @@ app.use('/api/contents', contentsRoute)
 app.use('/api/evaluations', evaluationsRoute)
 app.use('/api/progress', progressRoute)
 app.use('/api/checklist', checklistRoute)
+app.use('/api/mini-quizzes', miniQuizRoute)
+
 
 // Jalankan server
 app.listen(PORT, () => {

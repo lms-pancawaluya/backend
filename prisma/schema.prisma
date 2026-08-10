@@ -56,6 +56,9 @@ model User {
   // Relasi ke tabel lain
   progress user_progress[]
   answers  user_answers[]
+  dailyChecklists DailyChecklist[]  
+  miniQuizAttempts MiniQuizAttempt[] 
+
 
   @@map("users")
 }
@@ -87,6 +90,7 @@ model Content {
 
   // Relasi balik ke Module
   module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  miniQuiz MiniQuiz?
 
   @@map("contents")
 }
@@ -160,4 +164,101 @@ model user_answers {
 
   @@unique([userId, questionId]) 
   @@map("user_answers")
+}
+
+// ==========================================
+// DAILY CHECKLIST
+// ==========================================
+
+model ChecklistItem {
+  id          String           @id @default(uuid())
+  aspek       AspekPancawaluya
+  deskripsi   String           @db.Text
+  urutan      Int
+  isActive    Boolean          @default(true) @map("is_active")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  // Relasi
+  dailyChecklists DailyChecklist[]
+
+  @@map("checklist_items")
+}
+
+model DailyChecklist {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  checklistItemId String   @map("checklist_item_id")
+  tanggal         DateTime @db.Date
+  isChecked       Boolean  @default(false) @map("is_checked")
+  fotoBukti       String?  @map("foto_bukti") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relasi
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checklistItem ChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, checklistItemId, tanggal])
+  @@map("daily_checklist")
+}
+
+// ==========================================
+// MINI QUIZ
+// ==========================================
+
+model MiniQuiz {
+  id           String   @id @default(uuid())
+  contentId    String   @unique @map("content_id")
+  judul        String
+  passingScore Int      @default(80) @map("passing_score")
+  maxAttempts  Int      @default(3) @map("max_attempts")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relasi
+  content   Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  questions MiniQuizQuestion[]
+  attempts  MiniQuizAttempt[]
+
+  @@map("mini_quizzes")
+}
+
+model MiniQuizQuestion {
+  id         String   @id @default(uuid())
+  miniQuizId String   @map("mini_quiz_id")
+  pertanyaan String   @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relasi
+  miniQuiz MiniQuiz         @relation(fields: [miniQuizId], references: [id], onDelete: Cascade)
+  options  MiniQuizOption[]
+
+  @@map("mini_quiz_questions")
+}
+
+model MiniQuizOption {
+  id         String  @id @default(uuid())
+  questionId String  @map("question_id")
+  teksOpsi   String  @map("teks_opsi") @db.Text
+  isCorrect  Boolean @default(false) @map("is_correct")
+
+  // Relasi
+  question MiniQuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("mini_quiz_options")
+}
+
+model MiniQuizAttempt {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  miniQuizId    String   @map("mini_quiz_id")
+  attemptNumber Int      @map("attempt_number")
+  skor          Int
+  isPassed      Boolean  @map("is_passed")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relasi
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  miniQuiz MiniQuiz @relation(fields: [miniQuizId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, miniQuizId, attemptNumber])
+  @@map("mini_quiz_attempts")
 }

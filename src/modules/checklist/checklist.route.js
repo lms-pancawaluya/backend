@@ -51,14 +51,14 @@ router.get('/today',
 // POST submit checklist hari ini — Guru
 router.post('/today',
   authMiddleware,
-  roleMiddleware('guru'),
+  roleMiddleware('admin', 'guru'),
   checklistController.submitChecklist
 )
 
 // GET riwayat checklist — Guru
 router.get('/history',
   authMiddleware,
-  roleMiddleware('guru'),
+  roleMiddleware('admin', 'guru'),
   checklistController.getChecklistHistory
 )
 

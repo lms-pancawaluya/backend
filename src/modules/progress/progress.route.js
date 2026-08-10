@@ -11,7 +11,7 @@ const roleMiddleware = require('../../middlewares/role.middleware')
 // ================================================
 router.get('/',
   authMiddleware,
-  roleMiddleware('guru'),
+  roleMiddleware('admin','guru'),
   progressController.getProgress
 )
 
@@ -28,7 +28,7 @@ router.get('/summary',
 // ================================================
 router.post('/:moduleId/start',
   authMiddleware,
-  roleMiddleware('guru'),
+  roleMiddleware('admin','guru'),
   progressController.startModule
 )
 
@@ -37,7 +37,7 @@ router.post('/:moduleId/start',
 // ================================================
 router.post('/:moduleId/complete',
   authMiddleware,
-  roleMiddleware('guru'),
+  roleMiddleware('admin','guru'),
   progressController.completeModule
 )
 

@@ -12,8 +12,11 @@ const getAllUsers = async () => {
       nama: true,
       email: true,
       role: true,
+      nip: true,        
+      sekolah: true,    
+      noHp: true,       
+      fotoProfil: true, 
       createdAt: true,
-      // Hitung berapa modul yang sudah selesai
       progress: {
         where: { status: 'selesai' },
         select: { id: true }
@@ -22,12 +25,15 @@ const getAllUsers = async () => {
     orderBy: { createdAt: 'desc' }
   })
 
-  // Tambahkan field modulSelesai untuk kemudahan frontend
   return users.map(user => ({
     id: user.id,
     nama: user.nama,
     email: user.email,
     role: user.role,
+    nip: user.nip,
+    sekolah: user.sekolah,
+    noHp: user.noHp,
+    fotoProfil: user.fotoProfil,
     createdAt: user.createdAt,
     modulSelesai: user.progress.length
   }))
@@ -44,8 +50,11 @@ const getUserById = async (id) => {
       nama: true,
       email: true,
       role: true,
+      nip: true,
+      sekolah: true,
+      noHp: true,
+      fotoProfil: true,
       createdAt: true,
-      // Ambil juga progress belajarnya
       progress: {
         select: {
           status: true,
@@ -72,9 +81,8 @@ const getUserById = async (id) => {
 // UPDATE USER — Update data guru
 // ================================================
 const updateUser = async (id, data) => {
-  const { nama, email, role } = data
+  const { nama, email, role, nip, sekolah, noHp, fotoProfil } = data
 
-  // Cek apakah user ada
   const userAda = await prisma.user.findUnique({
     where: { id }
   })
@@ -83,30 +91,35 @@ const updateUser = async (id, data) => {
     throw new Error('User tidak ditemukan')
   }
 
-  // Kalau email diubah, cek apakah email baru sudah dipakai user lain
   if (email && email !== userAda.email) {
     const emailSudahAda = await prisma.user.findUnique({
       where: { email }
     })
-
     if (emailSudahAda) {
       throw new Error('Email sudah digunakan user lain')
     }
   }
 
-  // Update user
   const userUpdated = await prisma.user.update({
     where: { id },
     data: {
       ...(nama && { nama }),
       ...(email && { email }),
-      ...(role && { role })
+      ...(role && { role }),
+      ...(nip !== undefined && { nip }),           // ← TAMBAH
+      ...(sekolah !== undefined && { sekolah }),   // ← TAMBAH
+      ...(noHp !== undefined && { noHp }),         // ← TAMBAH
+      ...(fotoProfil !== undefined && { fotoProfil }) // ← TAMBAH
     },
     select: {
       id: true,
       nama: true,
       email: true,
       role: true,
+      nip: true,
+      sekolah: true,
+      noHp: true,
+      fotoProfil: true,
       createdAt: true
     }
   })

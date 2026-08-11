@@ -46,19 +46,21 @@ enum ProgressStatus {
 // ==========================================
 
 model User {
-  id        String   @id @default(uuid())
-  nama      String
-  email     String   @unique
-  password  String
-  role      Role     @default(guru)
-  createdAt DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid())
+  nama         String
+  email        String   @unique
+  password     String
+  role         Role     @default(guru)
+  nip          String?  @map("nip")           
+  sekolah      String?  @map("sekolah")       
+  noHp         String?  @map("no_hp")         
+  fotoProfil   String?  @map("foto_profil")   
+  createdAt    DateTime @default(now()) @map("created_at")
 
-  // Relasi ke tabel lain
-  progress user_progress[]
-  answers  user_answers[]
-  dailyChecklists DailyChecklist[]  
-  miniQuizAttempts MiniQuizAttempt[] 
-
+  progress         user_progress[]
+  answers          user_answers[]
+  dailyChecklists  DailyChecklist[]
+  miniQuizAttempts MiniQuizAttempt[]
 
   @@map("users")
 }

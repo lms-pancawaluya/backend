@@ -161,10 +161,15 @@ const getMyProfile = async (req, res) => {
 const updateMyProfile = async (req, res) => {
   try {
     const userId = req.user.id
-    const { nama, email } = req.body
+    const { nama, email, nip, sekolah, noHp } = req.body
 
-    // Guru tidak bisa ubah role lewat profile
-    const userUpdated = await usersService.updateUser(userId, { nama, email })
+    const userUpdated = await usersService.updateUser(userId, {
+      nama,
+      email,
+      nip,
+      sekolah,
+      noHp
+    })
 
     return res.status(200).json({
       sukses: true,

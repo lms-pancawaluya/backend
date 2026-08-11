@@ -12,6 +12,7 @@ const getAllUsers = async () => {
       nama: true,
       email: true,
       role: true,
+      gelar: true,   
       nip: true,        
       sekolah: true,    
       noHp: true,       
@@ -30,6 +31,7 @@ const getAllUsers = async () => {
     nama: user.nama,
     email: user.email,
     role: user.role,
+    gelar: user.gelar, 
     nip: user.nip,
     sekolah: user.sekolah,
     noHp: user.noHp,
@@ -50,6 +52,7 @@ const getUserById = async (id) => {
       nama: true,
       email: true,
       role: true,
+      gelar: true,
       nip: true,
       sekolah: true,
       noHp: true,
@@ -106,16 +109,18 @@ const updateUser = async (id, data) => {
       ...(nama && { nama }),
       ...(email && { email }),
       ...(role && { role }),
-      ...(nip !== undefined && { nip }),           // ← TAMBAH
-      ...(sekolah !== undefined && { sekolah }),   // ← TAMBAH
-      ...(noHp !== undefined && { noHp }),         // ← TAMBAH
-      ...(fotoProfil !== undefined && { fotoProfil }) // ← TAMBAH
+      ...(gelar !== undefined && { gelar }),
+      ...(nip !== undefined && { nip }),           
+      ...(sekolah !== undefined && { sekolah }),   
+      ...(noHp !== undefined && { noHp }),         
+      ...(fotoProfil !== undefined && { fotoProfil }) 
     },
     select: {
       id: true,
       nama: true,
       email: true,
       role: true,
+      gelar: true, 
       nip: true,
       sekolah: true,
       noHp: true,

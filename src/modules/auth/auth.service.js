@@ -8,7 +8,7 @@ const prisma = require('../../config/database')
 // REGISTER — Daftarkan user baru
 // ================================================
 const register = async (data) => {
-  const { nama, email, password } = data
+  const { nama, email, password, gelar  } = data
 
   // 1. Cek apakah email sudah terdaftar
   const emailSudahAda = await prisma.user.findUnique({
@@ -28,7 +28,8 @@ const register = async (data) => {
       nama,
       email,
       password: hashedPassword,
-      role: 'guru'
+      role: 'guru',
+      gelar: gelar || null
     },
     // Pilih field yang dikembalikan — jangan kembalikan password!
     select: {
@@ -36,6 +37,7 @@ const register = async (data) => {
       nama: true,
       email: true,
       role: true,
+      gelar: true, 
       createdAt: true
     }
   })
@@ -86,7 +88,8 @@ const login = async (data) => {
       id: user.id,
       nama: user.nama,
       email: user.email,
-      role: user.role
+      role: user.role,
+      gelar: user.gelar
     }
   }
 }

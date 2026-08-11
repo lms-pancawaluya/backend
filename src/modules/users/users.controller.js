@@ -60,10 +60,8 @@ const getUserById = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params
-    const { nama, email, role } = req.body
+    const { nama, email, role, gelar, nip, sekolah, noHp } = req.body // ← tambah role
 
-    // Cegah IDOR — guru hanya bisa update datanya sendiri
-    // Admin bisa update semua
     if (req.user.role !== 'admin' && req.user.id !== id) {
       return res.status(403).json({
         sukses: false,
@@ -71,7 +69,6 @@ const updateUser = async (req, res) => {
       })
     }
 
-    // Guru tidak boleh ubah role
     if (req.user.role !== 'admin' && role) {
       return res.status(403).json({
         sukses: false,
@@ -79,7 +76,15 @@ const updateUser = async (req, res) => {
       })
     }
 
-    const userUpdated = await usersService.updateUser(id, { nama, email, role })
+    const userUpdated = await usersService.updateUser(id, { // ← ganti userId → id
+      nama,
+      email,
+      role,
+      gelar,
+      nip,
+      sekolah,
+      noHp
+    })
 
     return res.status(200).json({
       sukses: true,
@@ -161,11 +166,12 @@ const getMyProfile = async (req, res) => {
 const updateMyProfile = async (req, res) => {
   try {
     const userId = req.user.id
-    const { nama, email, nip, sekolah, noHp } = req.body
+    const { nama, email, gelar, nip, sekolah, noHp } = req.body // ← tambah gelar
 
     const userUpdated = await usersService.updateUser(userId, {
       nama,
       email,
+      gelar,  // ← tambah gelar
       nip,
       sekolah,
       noHp

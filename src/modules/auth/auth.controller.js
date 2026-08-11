@@ -9,7 +9,7 @@ const register = async (req, res) => {
   try {
     // 1. Ambil data dari request body
     const { nama, email, password } = req.body
-
+    
     // 2. Validasi — pastikan semua field diisi
     if (!nama || !email || !password) {
       return res.status(400).json({

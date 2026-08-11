@@ -54,7 +54,8 @@ model User {
   nip          String?  @map("nip")           
   sekolah      String?  @map("sekolah")       
   noHp         String?  @map("no_hp")         
-  fotoProfil   String?  @map("foto_profil")   
+  fotoProfil   String?  @map("foto_profil") 
+  gelar        String?  @map("gelar")
   createdAt    DateTime @default(now()) @map("created_at")
 
   progress         user_progress[]

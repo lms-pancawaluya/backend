@@ -134,4 +134,95 @@ const deleteUser = async (req, res) => {
   }
 }
 
-module.exports = { getAllUsers, getUserById, updateUser, deleteUser }
+// ================================================
+// GET MY PROFILE — Guru lihat profil sendiri
+// ================================================
+const getMyProfile = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const user = await usersService.getUserById(userId)
+
+    return res.status(200).json({
+      sukses: true,
+      data: user
+    })
+
+  } catch (error) {
+    return res.status(404).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
+// UPDATE MY PROFILE — Guru update profil sendiri
+// ================================================
+const updateMyProfile = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { nama, email } = req.body
+
+    // Guru tidak bisa ubah role lewat profile
+    const userUpdated = await usersService.updateUser(userId, { nama, email })
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: 'Profil berhasil diupdate',
+      data: userUpdated
+    })
+
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
+// UPDATE PASSWORD — Guru ganti password
+// ================================================
+const updatePassword = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { passwordLama, passwordBaru } = req.body
+
+    if (!passwordLama || !passwordBaru) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Password lama dan password baru wajib diisi'
+      })
+    }
+
+    if (passwordBaru.length < 8) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Password baru minimal 8 karakter'
+      })
+    }
+
+    await usersService.updatePassword(userId, passwordLama, passwordBaru)
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: 'Password berhasil diupdate'
+    })
+
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+module.exports = { 
+  getAllUsers, 
+  getUserById, 
+  updateUser, 
+  deleteUser,
+  getMyProfile,
+  updateMyProfile,
+  updatePassword
+}

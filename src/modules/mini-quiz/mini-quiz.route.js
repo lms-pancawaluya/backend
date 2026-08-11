@@ -15,7 +15,7 @@ router.get('/',
 )
 
 // ================================================
-// POST buat mini kuis — Admin only
+// POST buat mini kuis — Admin only 
 // ================================================
 router.post('/',
   authMiddleware,

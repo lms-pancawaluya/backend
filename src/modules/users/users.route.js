@@ -36,4 +36,26 @@ router.delete('/:id',
   usersController.deleteUser
 )
 
+// ================================================
+// PROFILE ROUTES — Guru kelola profil sendiri
+// ================================================
+
+// GET profil sendiri
+router.get('/profile/me',
+  authMiddleware,
+  usersController.getMyProfile
+)
+
+// PUT update profil sendiri
+router.put('/profile/me',
+  authMiddleware,
+  usersController.updateMyProfile
+)
+
+// PUT ganti password
+router.put('/profile/me/password',
+  authMiddleware,
+  usersController.updatePassword
+)
+
 module.exports = router

@@ -1,5 +1,5 @@
 // src/modules/users/users.service.js
-
+const bcrypt = require('bcryptjs')
 const prisma = require('../../config/database')
 
 // ================================================
@@ -136,4 +136,39 @@ const deleteUser = async (id) => {
   return { pesan: 'User berhasil dihapus' }
 }
 
-module.exports = { getAllUsers, getUserById, updateUser, deleteUser }
+// ================================================
+// UPDATE PASSWORD
+// ================================================
+const updatePassword = async (id, passwordLama, passwordBaru) => {
+  // Ambil user dengan password
+  const user = await prisma.user.findUnique({
+    where: { id }
+  })
+
+  if (!user) {
+    throw new Error('User tidak ditemukan')
+  }
+
+  // Verifikasi password lama
+  const passwordCocok = await bcrypt.compare(passwordLama, user.password)
+  if (!passwordCocok) {
+    throw new Error('Password lama tidak sesuai')
+  }
+
+  // Hash password baru
+  const hashedPassword = await bcrypt.hash(passwordBaru, 10)
+
+  // Update password
+  await prisma.user.update({
+    where: { id },
+    data: { password: hashedPassword }
+  })
+}
+
+module.exports = { 
+  getAllUsers,
+  getUserById,
+  updateUser,
+  deleteUser,
+  updatePassword
+}

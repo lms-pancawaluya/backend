@@ -84,7 +84,7 @@ const getUserById = async (id) => {
 // UPDATE USER — Update data guru
 // ================================================
 const updateUser = async (id, data) => {
-  const { nama, email, role, nip, sekolah, noHp, fotoProfil } = data
+  const { nama, email, role, gelar, nip, sekolah, noHp, fotoProfil } = data
 
   const userAda = await prisma.user.findUnique({
     where: { id }
@@ -109,6 +109,7 @@ const updateUser = async (id, data) => {
       ...(nama && { nama }),
       ...(email && { email }),
       ...(role && { role }),
+       ...(gelar !== undefined && { gelar }), 
       ...(gelar !== undefined && { gelar }),
       ...(nip !== undefined && { nip }),           
       ...(sekolah !== undefined && { sekolah }),   

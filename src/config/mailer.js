@@ -1,34 +1,16 @@
 // src/config/mailer.js
+const { Resend } = require('resend')
 
-const nodemailer = require('nodemailer')
-const dns = require('dns')
-
-// Paksa DNS menyelesaikan IP ke IPv4 terlebih dahulu (Mencegah ENETUNREACH IPv6 di Railway)
-dns.setDefaultResultOrder('ipv4first')
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, // Port 587 menggunakan TLS via STARTTLS
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  },
-  family: 4, // Paksa gunakan IPv4
-  connectionTimeout: 10000,
-  greetingTimeout: 5000,
-  tls: {
-    rejectUnauthorized: false
-  }
-})
+// Inisialisasi Resend menggunakan API Key dari environment variable
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 // ================================================
 // KIRIM OTP REGISTER
 // ================================================
 const sendOtpRegister = async (email, otpCode) => {
-  const mailOptions = {
-    from: `"LMS Pancawaluya" <${process.env.EMAIL_USER}>`,
-    to: email,
+  const { data, error } = await resend.emails.send({
+    from: 'LMS Pancawaluya <onboarding@resend.dev>',
+    to: [email],
     subject: 'Kode Verifikasi Registrasi - LMS Pancawaluya',
     html: `
       <div style="font-family: Arial, sans-serif; padding: 24px; border: 1px solid #E2E8F0; border-radius: 12px; max-width: 500px; margin: 0 auto; background-color: #ffffff;">
@@ -49,18 +31,23 @@ const sendOtpRegister = async (email, otpCode) => {
         </p>
       </div>
     `
+  })
+
+  if (error) {
+    console.error('Error Resend (Register OTP):', error)
+    throw new Error(error.message)
   }
 
-  await transporter.sendMail(mailOptions)
+  return data
 }
 
 // ================================================
 // KIRIM OTP RESET PASSWORD
 // ================================================
 const sendOtpResetPassword = async (email, otpCode) => {
-  const mailOptions = {
-    from: `"LMS Pancawaluya" <${process.env.EMAIL_USER}>`,
-    to: email,
+  const { data, error } = await resend.emails.send({
+    from: 'LMS Pancawaluya <onboarding@resend.dev>',
+    to: [email],
     subject: 'Kode Reset Password - LMS Pancawaluya',
     html: `
       <div style="font-family: Arial, sans-serif; padding: 24px; border: 1px solid #E2E8F0; border-radius: 12px; max-width: 500px; margin: 0 auto; background-color: #ffffff;">
@@ -81,9 +68,14 @@ const sendOtpResetPassword = async (email, otpCode) => {
         </p>
       </div>
     `
+  })
+
+  if (error) {
+    console.error('Error Resend (Reset Password OTP):', error)
+    throw new Error(error.message)
   }
 
-  await transporter.sendMail(mailOptions)
+  return data
 }
 
 module.exports = { sendOtpRegister, sendOtpResetPassword }

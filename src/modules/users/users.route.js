@@ -58,4 +58,11 @@ router.put('/profile/me/password',
   usersController.updatePassword
 )
 
+// PUT reset password guru — Hanya admin
+router.put('/:id/reset-password',
+  authMiddleware,
+  roleMiddleware('admin'),
+  usersController.adminResetPassword
+)
+
 module.exports = router

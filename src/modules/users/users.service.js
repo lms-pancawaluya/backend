@@ -195,10 +195,38 @@ const updatePassword = async (id, passwordLama, passwordBaru) => {
   })
 }
 
+// ================================================
+// ADMIN RESET PASSWORD — Admin reset password guru
+// ================================================
+const adminResetPassword = async (id, passwordBaru) => {
+  const user = await prisma.user.findUnique({
+    where: { id }
+  })
+
+  if (!user) {
+    throw new Error('User tidak ditemukan')
+  }
+
+  // Pastikan yang direset adalah guru, bukan admin lain
+  if (user.role === 'admin') {
+    throw new Error('Tidak bisa reset password akun admin')
+  }
+
+  const hashedPassword = await bcrypt.hash(passwordBaru, 10)
+
+  await prisma.user.update({
+    where: { id },
+    data: { password: hashedPassword }
+  })
+
+  return { pesan: `Password guru ${user.nama} berhasil direset oleh admin.` }
+}
+
 module.exports = { 
   getAllUsers,
   getUserById,
   updateUser,
   deleteUser,
-  updatePassword
+  updatePassword,
+  adminResetPassword 
 }

@@ -228,6 +228,43 @@ const updatePassword = async (req, res) => {
   }
 }
 
+// ================================================
+// ADMIN RESET PASSWORD — Admin reset password guru
+// ================================================
+const adminResetPassword = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { passwordBaru } = req.body
+
+    if (!passwordBaru) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Password baru wajib diisi'
+      })
+    }
+
+    if (passwordBaru.length < 8) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Password baru minimal 8 karakter'
+      })
+    }
+
+    const hasil = await usersService.adminResetPassword(id, passwordBaru)
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: hasil.pesan
+    })
+
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = { 
   getAllUsers, 
   getUserById, 
@@ -235,5 +272,6 @@ module.exports = {
   deleteUser,
   getMyProfile,
   updateMyProfile,
-  updatePassword
+  updatePassword,
+  adminResetPassword 
 }

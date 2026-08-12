@@ -51,10 +51,13 @@ model User {
   email        String   @unique
   password     String
   role         Role     @default(guru)
-  nip          String?  @map("nip")           
+  nip          String?   @unique @map("nip")          
   sekolah      String?  @map("sekolah")       
   noHp         String?  @map("no_hp")         
   fotoProfil   String?  @map("foto_profil") 
+  isVerified   Boolean   @default(false) @map("is_verified")
+  otpCode      String?   @map("otp_code") 
+  otpExpiresAt DateTime? @map("otp_expires_at")
   gelar        String?  @map("gelar")
   createdAt    DateTime @default(now()) @map("created_at")
 

@@ -41,6 +41,13 @@ enum ProgressStatus {
   selesai
 }
 
+enum UserStatus {
+  aktif
+  nonaktif
+  pensiun
+  wafat
+}
+
 // ==========================================
 // TABEL DATABASE (MODELS)
 // ==========================================
@@ -51,6 +58,7 @@ model User {
   email        String   @unique
   password     String
   role         Role     @default(guru)
+  status       UserStatus @default(aktif) @map("status")
   nip          String?   @unique @map("nip")          
   sekolah      String?  @map("sekolah")       
   noHp         String?  @map("no_hp")         

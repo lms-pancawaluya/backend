@@ -17,6 +17,7 @@ const getAllUsers = async () => {
       sekolah: true,    
       noHp: true,       
       fotoProfil: true, 
+      status: true,
       createdAt: true,
       progress: {
         where: { status: 'selesai' },
@@ -36,6 +37,7 @@ const getAllUsers = async () => {
     sekolah: user.sekolah,
     noHp: user.noHp,
     fotoProfil: user.fotoProfil,
+    status: user.status,
     createdAt: user.createdAt,
     modulSelesai: user.progress.length
   }))
@@ -57,6 +59,7 @@ const getUserById = async (id) => {
       sekolah: true,
       noHp: true,
       fotoProfil: true,
+      status: true,
       createdAt: true,
       progress: {
         select: {
@@ -84,7 +87,8 @@ const getUserById = async (id) => {
 // UPDATE USER — Update data guru
 // ================================================
 const updateUser = async (id, data) => {
-  const { nama, email, role, gelar, nip, sekolah, noHp, fotoProfil } = data
+  const { nama, email, gelar, sekolah, noHp, fotoProfil, status } = data
+  // ⚠️ NIP sengaja tidak ada — tidak boleh diubah!
 
   const userAda = await prisma.user.findUnique({
     where: { id }
@@ -92,6 +96,14 @@ const updateUser = async (id, data) => {
 
   if (!userAda) {
     throw new Error('User tidak ditemukan')
+  }
+
+  // Validasi status kalau dikirim
+  if (status) {
+    const statusValid = ['aktif', 'nonaktif', 'pensiun', 'wafat']
+    if (!statusValid.includes(status)) {
+      throw new Error(`Status harus salah satu dari: ${statusValid.join(', ')}`)
+    }
   }
 
   if (email && email !== userAda.email) {
@@ -108,24 +120,23 @@ const updateUser = async (id, data) => {
     data: {
       ...(nama && { nama }),
       ...(email && { email }),
-      ...(role && { role }),
-       ...(gelar !== undefined && { gelar }), 
       ...(gelar !== undefined && { gelar }),
-      ...(nip !== undefined && { nip }),           
-      ...(sekolah !== undefined && { sekolah }),   
-      ...(noHp !== undefined && { noHp }),         
-      ...(fotoProfil !== undefined && { fotoProfil }) 
+      ...(sekolah !== undefined && { sekolah }),
+      ...(noHp !== undefined && { noHp }),
+      ...(fotoProfil !== undefined && { fotoProfil }),
+      ...(status && { status })
     },
     select: {
       id: true,
       nama: true,
       email: true,
       role: true,
-      gelar: true, 
-      nip: true,
+      gelar: true,
+      nip: true,        
       sekolah: true,
       noHp: true,
       fotoProfil: true,
+      status: true,
       createdAt: true
     }
   })

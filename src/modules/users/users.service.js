@@ -87,7 +87,8 @@ const getUserById = async (id) => {
 // UPDATE USER — Update data guru
 // ================================================
 const updateUser = async (id, data) => {
-  const { nama, email, gelar, sekolah, noHp, fotoProfil, status } = data
+  // Tambahkan 'role' di destructuring
+  const { nama, email, role, gelar, sekolah, noHp, fotoProfil, status } = data
   // ⚠️ NIP sengaja tidak ada — tidak boleh diubah!
 
   const userAda = await prisma.user.findUnique({
@@ -98,12 +99,18 @@ const updateUser = async (id, data) => {
     throw new Error('User tidak ditemukan')
   }
 
-  // Validasi status kalau dikirim
-  if (status) {
-    const statusValid = ['aktif', 'nonaktif', 'pensiun', 'wafat']
-    if (!statusValid.includes(status)) {
-      throw new Error(`Status harus salah satu dari: ${statusValid.join(', ')}`)
+  // Objek penampung update
+  const payloadToUpdate = {}
+
+  if (nama) payloadToUpdate.nama = nama
+  
+  // Tambahkan handling role
+  if (role) {
+    const roleValid = ['admin', 'guru']
+    if (!roleValid.includes(role)) {
+      throw new Error(`Role harus salah satu dari: ${roleValid.join(', ')}`)
     }
+    payloadToUpdate.role = role
   }
 
   if (email && email !== userAda.email) {
@@ -113,19 +120,29 @@ const updateUser = async (id, data) => {
     if (emailSudahAda) {
       throw new Error('Email sudah digunakan user lain')
     }
+    payloadToUpdate.email = email
+  }
+
+  if (gelar !== undefined) payloadToUpdate.gelar = gelar
+  if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
+  if (noHp !== undefined) payloadToUpdate.noHp = noHp
+  if (fotoProfil !== undefined) payloadToUpdate.fotoProfil = fotoProfil
+
+  // Penanganan status (Aman)
+  if (status !== undefined && status !== null && status !== '') {
+    const statusNormalized = String(status).toLowerCase()
+    const statusValid = ['aktif', 'nonaktif', 'pensiun', 'wafat']
+    
+    if (!statusValid.includes(statusNormalized)) {
+      throw new Error(`Status harus salah satu dari: ${statusValid.join(', ')}`)
+    }
+    
+    payloadToUpdate.status = statusNormalized
   }
 
   const userUpdated = await prisma.user.update({
     where: { id },
-    data: {
-      ...(nama && { nama }),
-      ...(email && { email }),
-      ...(gelar !== undefined && { gelar }),
-      ...(sekolah !== undefined && { sekolah }),
-      ...(noHp !== undefined && { noHp }),
-      ...(fotoProfil !== undefined && { fotoProfil }),
-      ...(status && { status })
-    },
+    data: payloadToUpdate,
     select: {
       id: true,
       nama: true,

@@ -60,7 +60,7 @@ const getUserById = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params
-    const { nama, email, role, gelar, nip, sekolah, noHp } = req.body // ← tambah role
+    const { nama, email, role, gelar, nip, sekolah, noHp, fotoProfil, status } = req.body // ← tambah role
 
     if (req.user.role !== 'admin' && req.user.id !== id) {
       return res.status(403).json({
@@ -83,7 +83,9 @@ const updateUser = async (req, res) => {
       gelar,
       nip,
       sekolah,
-      noHp
+      noHp,
+      fotoProfil,
+      status
     })
 
     return res.status(200).json({

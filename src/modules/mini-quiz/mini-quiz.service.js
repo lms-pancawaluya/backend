@@ -121,7 +121,7 @@ const getMyAttempts = async (userId, miniQuizId) => {
     throw new Error('Mini kuis tidak ditemukan')
   }
 
-  const isLolos = attempts.some(a => a.isPassed)
+  const isLolos = attempts.some(a => a.isLolos)
   const jumlahPercobaan = attempts.length
   const sisaPercobaan = miniQuiz.maxAttempts - jumlahPercobaan
 
@@ -161,7 +161,7 @@ const submitAttempt = async (userId, miniQuizId, data) => {
   })
 
   // Kalau sudah lulus, tidak perlu coba lagi
-  const sudahLulus = attempts.some(a => a.isPassed)
+  const sudahLulus = attempts.some(a => a.isLolos)
   if (sudahLulus) {
     throw new Error('Kamu sudah lulus mini kuis ini!')
   }
@@ -195,7 +195,7 @@ const submitAttempt = async (userId, miniQuizId, data) => {
       miniQuizId,
       attemptNumber,
       skor,
-      isPassed: isLolos
+      isLolos: isLolos
     }
   })
 
@@ -274,7 +274,7 @@ const checkContentLock = async (userId, contentId) => {
 
   // Cek apakah guru sudah lulus semua mini kuis pada konten sebelumnya
   const semuaQuizLulus = kontenSebelumnya.miniQuizzes.every(quiz =>
-    quiz.attempts.some(a => a.isPassed)
+    quiz.attempts.some(a => a.isLolos)
   )
 
   if (!semuaQuizLulus) {

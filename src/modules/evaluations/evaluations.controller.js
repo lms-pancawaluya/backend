@@ -123,6 +123,54 @@ const createQuestion = async (req, res) => {
 }
 
 // ================================================
+// UPDATE QUESTION — Hanya admin
+// ================================================
+const updateQuestion = async (req, res) => {
+  try {
+    const { questionId } = req.params
+    const { pertanyaan, options } = req.body
+
+    const updatedQuestion = await evaluationsService.updateQuestion(questionId, {
+      pertanyaan,
+      options
+    })
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: 'Soal evaluasi berhasil diperbarui',
+      data: updatedQuestion
+    })
+
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
+// DELETE QUESTION — Hanya admin
+// ================================================
+const deleteQuestion = async (req, res) => {
+  try {
+    const { questionId } = req.params
+    const result = await evaluationsService.deleteQuestion(questionId)
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: result.pesan
+    })
+
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
 // SUBMIT JAWABAN — Guru submit jawaban
 // ================================================
 const submitJawaban = async (req, res) => {
@@ -217,6 +265,8 @@ module.exports = {
   getEvaluationById,
   createEvaluation,
   createQuestion,
+  updateQuestion,
+  deleteQuestion,
   submitJawaban,
   getAnswersByEvaluation,
   getMyAnswers 

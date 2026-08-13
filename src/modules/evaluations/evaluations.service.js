@@ -364,11 +364,87 @@ const getMyAnswers = async (evaluationId, userId) => {
   }
 }
 
+// ================================================
+// UPDATE QUESTION & OPTIONS
+// ================================================
+const updateQuestion = async (questionId, data) => {
+  const { pertanyaan, options } = data
+
+  const questionAda = await prisma.question.findUnique({
+    where: { id: questionId }
+  })
+
+  if (!questionAda) {
+    throw new Error('Soal tidak ditemukan')
+  }
+
+  // Jika menyertakan opsi baru, lakukan validasi
+  if (options) {
+    if (options.length < 2) {
+      throw new Error('Soal pilihan ganda harus memiliki minimal 2 pilihan jawaban')
+    }
+    const adaJawabanBenar = options.some(opt => opt.isCorrect === true)
+    if (!adaJawabanBenar) {
+      throw new Error('Harus ada minimal 1 jawaban yang benar')
+    }
+  }
+
+  // Update pertanyaan & ganti opsi jawaban secara transaksional
+  const updatedQuestion = await prisma.$transaction(async (tx) => {
+    if (options) {
+      // Hapus opsi lama
+      await tx.option.deleteMany({
+        where: { questionId }
+      })
+    }
+
+    return await tx.question.update({
+      where: { id: questionId },
+      data: {
+        pertanyaan: pertanyaan || questionAda.pertanyaan,
+        ...(options && {
+          options: {
+            create: options.map(opt => ({
+              teksOpsi: opt.teksOpsi,
+              isCorrect: opt.isCorrect || false
+            }))
+          }
+        })
+      },
+      include: { options: true }
+    })
+  })
+
+  return updatedQuestion
+}
+
+// ================================================
+// DELETE QUESTION
+// ================================================
+const deleteQuestion = async (questionId) => {
+  const questionAda = await prisma.question.findUnique({
+    where: { id: questionId }
+  })
+
+  if (!questionAda) {
+    throw new Error('Soal tidak ditemukan')
+  }
+
+  // Hapus soal (Prisma cascade otomatis menghapus options terkait)
+  await prisma.question.delete({
+    where: { id: questionId }
+  })
+
+  return { pesan: 'Soal berhasil dihapus' }
+}
+
 module.exports = {
   getEvaluationsByModule,
   getEvaluationById,
   createEvaluation,
   createQuestion,
+  updateQuestion,
+  deleteQuestion,
   submitJawaban,
   getAnswersByEvaluation,
   getMyAnswers 

@@ -1,16 +1,17 @@
+// src/modules/miniQuiz/miniQuiz.service.js
+
 const prisma = require('../../config/database')
 
 // ================================================
 // GET MINI QUIZ BY CONTENT — Ambil mini kuis
 // ================================================
 const getMiniQuizByContent = async (contentId) => {
-  // Menggunakan findMany agar 1 materi bisa punya mini quiz di tengah video & di akhir materi
   const miniQuizzes = await prisma.miniQuiz.findMany({
     where: { contentId },
     select: {
       id: true,
       judul: true,
-      timestampSeconds: true, // Untuk pemicu pop-up di detik video tertentu (misal: 120 = menit ke-2)
+      timestampSeconds: true,
       passingScore: true,
       maxAttempts: true,
       createdAt: true,
@@ -22,7 +23,6 @@ const getMiniQuizByContent = async (contentId) => {
             select: {
               id: true,
               teksOpsi: true
-              // isCorrect disembunyikan dari guru
             }
           }
         }
@@ -40,7 +40,6 @@ const getMiniQuizByContent = async (contentId) => {
 const createMiniQuiz = async (contentId, data) => {
   const { judul, passingScore, maxAttempts, timestampSeconds } = data
 
-  // Cek apakah konten ada
   const contentAda = await prisma.content.findUnique({
     where: { id: contentId }
   })
@@ -53,13 +52,61 @@ const createMiniQuiz = async (contentId, data) => {
     data: {
       contentId,
       judul,
-      timestampSeconds: timestampSeconds ? parseInt(timestampSeconds) : null, // null jika kuis di akhir materi
+      timestampSeconds: timestampSeconds ? parseInt(timestampSeconds) : null,
       passingScore: passingScore || 80,
       maxAttempts: maxAttempts || 3
     }
   })
 
   return miniQuizBaru
+}
+
+// ================================================
+// UPDATE MINI QUIZ — Admin edit header mini kuis
+// ================================================
+const updateMiniQuiz = async (miniQuizId, data) => {
+  const { judul, passingScore, maxAttempts, timestampSeconds } = data
+
+  const miniQuizAda = await prisma.miniQuiz.findUnique({
+    where: { id: miniQuizId }
+  })
+
+  if (!miniQuizAda) {
+    throw new Error('Mini kuis tidak ditemukan')
+  }
+
+  const updatedMiniQuiz = await prisma.miniQuiz.update({
+    where: { id: miniQuizId },
+    data: {
+      judul: judul || miniQuizAda.judul,
+      timestampSeconds: timestampSeconds !== undefined 
+        ? (timestampSeconds ? parseInt(timestampSeconds) : null) 
+        : miniQuizAda.timestampSeconds,
+      passingScore: passingScore || miniQuizAda.passingScore,
+      maxAttempts: maxAttempts || miniQuizAda.maxAttempts
+    }
+  })
+
+  return updatedMiniQuiz
+}
+
+// ================================================
+// DELETE MINI QUIZ — Admin hapus mini kuis
+// ================================================
+const deleteMiniQuiz = async (miniQuizId) => {
+  const miniQuizAda = await prisma.miniQuiz.findUnique({
+    where: { id: miniQuizId }
+  })
+
+  if (!miniQuizAda) {
+    throw new Error('Mini kuis tidak ditemukan')
+  }
+
+  await prisma.miniQuiz.delete({
+    where: { id: miniQuizId }
+  })
+
+  return { pesan: 'Mini kuis berhasil dihapus' }
 }
 
 // ================================================
@@ -76,8 +123,7 @@ const createQuestion = async (miniQuizId, data) => {
     throw new Error('Mini kuis tidak ditemukan')
   }
 
-  // Validasi options
-  if (!options || options.length < 2) {
+  if (!options || !Array.isArray(options) || options.length < 2) {
     throw new Error('Soal harus memiliki minimal 2 pilihan jawaban')
   }
 
@@ -101,6 +147,84 @@ const createQuestion = async (miniQuizId, data) => {
   })
 
   return questionBaru
+}
+
+// ================================================
+// UPDATE QUESTION — Admin edit soal mini kuis (FIXED)
+// ================================================
+const updateQuestion = async (questionId, data) => {
+  const { pertanyaan, options } = data
+
+  const questionAda = await prisma.miniQuizQuestion.findUnique({
+    where: { id: questionId }
+  })
+
+  if (!questionAda) {
+    throw new Error('Soal tidak ditemukan')
+  }
+
+  // Jika menyertakan opsi jawaban baru, lakukan validasi ketat
+  if (options !== undefined) {
+    if (!Array.isArray(options) || options.length < 2) {
+      throw new Error('Soal harus memiliki minimal 2 pilihan jawaban')
+    }
+    const adaJawabanBenar = options.some(opt => opt.isCorrect === true)
+    if (!adaJawabanBenar) {
+      throw new Error('Harus ada minimal 1 jawaban yang benar')
+    }
+  }
+
+  const updatedQuestion = await prisma.$transaction(async (tx) => {
+    // 1. Update teks pertanyaan
+    await tx.miniQuizQuestion.update({
+      where: { id: questionId },
+      data: {
+        pertanyaan: pertanyaan || questionAda.pertanyaan
+      }
+    })
+
+    // 2. Jika options dikirim, hapus yang lama & ganti yang baru
+    if (options && Array.isArray(options)) {
+      await tx.miniQuizOption.deleteMany({
+        where: { questionId }
+      })
+
+      await tx.miniQuizOption.createMany({
+        data: options.map(opt => ({
+          questionId,
+          teksOpsi: opt.teksOpsi,
+          isCorrect: opt.isCorrect || false
+        }))
+      })
+    }
+
+    // 3. Return data terbaru
+    return await tx.miniQuizQuestion.findUnique({
+      where: { id: questionId },
+      include: { options: true }
+    })
+  })
+
+  return updatedQuestion
+}
+
+// ================================================
+// DELETE QUESTION — Admin hapus soal mini kuis
+// ================================================
+const deleteQuestion = async (questionId) => {
+  const questionAda = await prisma.miniQuizQuestion.findUnique({
+    where: { id: questionId }
+  })
+
+  if (!questionAda) {
+    throw new Error('Soal tidak ditemukan')
+  }
+
+  await prisma.miniQuizQuestion.delete({
+    where: { id: questionId }
+  })
+
+  return { pesan: 'Soal berhasil dihapus' }
 }
 
 // ================================================
@@ -136,10 +260,14 @@ const getMyAttempts = async (userId, miniQuizId) => {
 }
 
 // ================================================
-// SUBMIT ATTEMPT — Guru kerjakan mini kuis
+// SUBMIT ATTEMPT — Guru kerjakan mini kuis (FIXED)
 // ================================================
 const submitAttempt = async (userId, miniQuizId, data) => {
   const { jawaban } = data
+
+  if (!jawaban || !Array.isArray(jawaban)) {
+    throw new Error('Format jawaban tidak valid')
+  }
 
   const miniQuiz = await prisma.miniQuiz.findUnique({
     where: { id: miniQuizId },
@@ -154,19 +282,16 @@ const submitAttempt = async (userId, miniQuizId, data) => {
     throw new Error('Mini kuis tidak ditemukan')
   }
 
-  // Cek riwayat percobaan
   let attempts = await prisma.miniQuizAttempt.findMany({
     where: { userId, miniQuizId },
     orderBy: { attemptNumber: 'asc' }
   })
 
-  // Kalau sudah lulus, tidak perlu coba lagi
   const sudahLulus = attempts.some(a => a.isLolos)
   if (sudahLulus) {
     throw new Error('Kamu sudah lulus mini kuis ini!')
   }
 
-  // Hitung skor
   let benar = 0
   const totalSoal = miniQuiz.questions.length
 
@@ -188,7 +313,6 @@ const submitAttempt = async (userId, miniQuizId, data) => {
   const isLolos = skor >= miniQuiz.passingScore
   const attemptNumber = attempts.length + 1
 
-  // Simpan percobaan baru
   await prisma.miniQuizAttempt.create({
     data: {
       userId,
@@ -202,7 +326,6 @@ const submitAttempt = async (userId, miniQuizId, data) => {
   const maxAttempts = miniQuiz.maxAttempts
   const sisaPercobaan = maxAttempts - attemptNumber
 
-  // PERBAIKAN: Jika gagal di percobaan ke-3 (habis), otomatis reset percobaan agar siap diulang dari awal
   let mustRepeat = false
   if (!isLolos && sisaPercobaan <= 0) {
     mustRepeat = true
@@ -246,12 +369,10 @@ const checkContentLock = async (userId, contentId) => {
     throw new Error('Konten tidak ditemukan')
   }
 
-  // Konten pertama selalu terbuka
   if (content.urutan === 1) {
     return { isLocked: false, alasan: null }
   }
 
-  // Cari konten tepat sebelum ini
   const kontenSebelumnya = await prisma.content.findFirst({
     where: {
       moduleId: content.moduleId,
@@ -272,7 +393,6 @@ const checkContentLock = async (userId, contentId) => {
     return { isLocked: false, alasan: null }
   }
 
-  // Cek apakah guru sudah lulus semua mini kuis pada konten sebelumnya
   const semuaQuizLulus = kontenSebelumnya.miniQuizzes.every(quiz =>
     quiz.attempts.some(a => a.isLolos)
   )
@@ -290,7 +410,11 @@ const checkContentLock = async (userId, contentId) => {
 module.exports = {
   getMiniQuizByContent,
   createMiniQuiz,
+  updateMiniQuiz,
+  deleteMiniQuiz,
   createQuestion,
+  updateQuestion,
+  deleteQuestion,
   getMyAttempts,
   submitAttempt,
   checkContentLock

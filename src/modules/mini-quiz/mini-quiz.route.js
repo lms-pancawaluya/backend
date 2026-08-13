@@ -8,7 +8,7 @@ const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
 
 // ================================================
-// ROUTE BERBASIS KONTEN (:contentId)
+// 1. ROUTE BERBASIS KONTEN (:contentId)
 // ================================================
 
 // GET mini kuis berdasarkan ID Konten — Admin & Guru
@@ -19,7 +19,7 @@ router.get(
   miniQuizController.getMiniQuizByContent
 )
 
-// POST buat mini kuis pada Konten tertentu — Admin only
+// POST buat mini kuis baru pada Konten tertentu — Admin only
 // POST /api/mini-quizzes/content/:contentId
 router.post(
   '/content/:contentId',
@@ -29,16 +29,56 @@ router.post(
 )
 
 // GET cek apakah konten berikutnya terkunci — Admin & Guru
-// GET /api/mini-quizzes/check-lock/:contentId
+// GET /api/mini-quizzes/content/:contentId/check-lock
 router.get(
-  '/check-lock/:contentId',
+  '/content/:contentId/check-lock',
   authMiddleware,
   miniQuizController.checkContentLock
 )
 
 // ================================================
-// ROUTE BERBASIS MINI QUIZ (:id)
+// 2. ROUTE KELOLA SOAL / QUESTION (:id = questionId)
 // ================================================
+
+// PUT edit 1 butir soal — Admin only
+// PUT /api/mini-quizzes/questions/:id
+router.put(
+  '/questions/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  miniQuizController.updateQuestion
+)
+
+// DELETE hapus 1 butir soal — Admin only
+// DELETE /api/mini-quizzes/questions/:id
+router.delete(
+  '/questions/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  miniQuizController.deleteQuestion
+)
+
+// ================================================
+// 3. ROUTE BERBASIS MINI QUIZ (:id = miniQuizId)
+// ================================================
+
+// PUT edit header mini kuis — Admin only
+// PUT /api/mini-quizzes/:id
+router.put(
+  '/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  miniQuizController.updateMiniQuiz
+)
+
+// DELETE hapus mini kuis beserta seluruh soalnya — Admin only
+// DELETE /api/mini-quizzes/:id
+router.delete(
+  '/:id',
+  authMiddleware,
+  roleMiddleware('admin'),
+  miniQuizController.deleteMiniQuiz
+)
 
 // POST tambah soal ke mini kuis — Admin only
 // POST /api/mini-quizzes/:id/questions

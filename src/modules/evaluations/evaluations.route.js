@@ -41,6 +41,24 @@ router.post('/:id/questions',
 )
 
 // ================================================
+// PUT update soal — Hanya admin
+// ================================================
+router.put('/questions/:questionId',
+  authMiddleware,
+  roleMiddleware('admin'),
+  evaluationsController.updateQuestion
+)
+
+// ================================================
+// DELETE hapus soal — Hanya admin
+// ================================================
+router.delete('/questions/:questionId',
+  authMiddleware,
+  roleMiddleware('admin'),
+  evaluationsController.deleteQuestion
+)
+
+// ================================================
 // POST submit jawaban — Hanya guru
 // ================================================
 router.post('/:id/submit',
@@ -49,14 +67,18 @@ router.post('/:id/submit',
   evaluationsController.submitJawaban
 )
 
+// ================================================
 // GET semua jawaban di evaluasi — Hanya admin
+// ================================================
 router.get('/:id/answers',
   authMiddleware,
   roleMiddleware('admin'),
   evaluationsController.getAnswersByEvaluation
 )
 
+// ================================================
 // GET jawaban saya sendiri — Guru
+// ================================================
 router.get('/:id/my-answers',
   authMiddleware,
   evaluationsController.getMyAnswers

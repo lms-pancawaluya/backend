@@ -19,6 +19,8 @@ const getEvaluationsByModule = async (moduleId) => {
     select: {
       id: true,
       judul: true,
+      passingScore: true,
+      maxAttempts: true,
       createdAt: true,
       _count: {
         select: { questions: true }
@@ -30,7 +32,7 @@ const getEvaluationsByModule = async (moduleId) => {
 }
 
 // ================================================
-// GET EVALUATION BY ID + SOAL
+// GET EVALUATION BY ID + SOAL PG
 // ================================================
 const getEvaluationById = async (id) => {
   const evaluation = await prisma.evaluation.findUnique({
@@ -39,19 +41,19 @@ const getEvaluationById = async (id) => {
       id: true,
       judul: true,
       moduleId: true,
+      passingScore: true,
+      maxAttempts: true,
       createdAt: true,
       questions: {
         select: {
           id: true,
           pertanyaan: true,
           tipe: true,
-          // Tampilkan options tapi sembunyikan isCorrect untuk guru
+          // Sembunyikan isCorrect agar tidak bocor ke user/guru
           options: {
             select: {
               id: true,
               teksOpsi: true
-              // isCorrect sengaja tidak diambil
-              // supaya guru tidak bisa lihat jawaban benar
             }
           }
         }
@@ -70,7 +72,7 @@ const getEvaluationById = async (id) => {
 // CREATE EVALUATION
 // ================================================
 const createEvaluation = async (moduleId, data) => {
-  const { judul } = data
+  const { judul, passingScore, maxAttempts } = data
 
   const moduleAda = await prisma.module.findUnique({
     where: { id: moduleId }
@@ -81,17 +83,22 @@ const createEvaluation = async (moduleId, data) => {
   }
 
   const evaluationBaru = await prisma.evaluation.create({
-    data: { moduleId, judul }
+    data: { 
+      moduleId, 
+      judul,
+      passingScore: passingScore || 80,
+      maxAttempts: maxAttempts || 3
+    }
   })
 
   return evaluationBaru
 }
 
 // ================================================
-// CREATE QUESTION + OPTIONS
+// CREATE QUESTION + OPTIONS (Murni PG)
 // ================================================
 const createQuestion = async (evaluationId, data) => {
-  const { pertanyaan, tipe, options } = data
+  const { pertanyaan, options } = data
 
   const evaluationAda = await prisma.evaluation.findUnique({
     where: { id: evaluationId }
@@ -101,32 +108,26 @@ const createQuestion = async (evaluationId, data) => {
     throw new Error('Evaluasi tidak ditemukan')
   }
 
-  // Kalau tipe pilihan_ganda, options wajib ada
-  if (tipe === 'pilihan_ganda') {
-    if (!options || options.length < 2) {
-      throw new Error('Soal pilihan ganda harus memiliki minimal 2 pilihan jawaban')
-    }
-
-    // Pastikan ada minimal 1 jawaban benar
-    const adaJawabanBenar = options.some(opt => opt.isCorrect === true)
-    if (!adaJawabanBenar) {
-      throw new Error('Harus ada minimal 1 jawaban yang benar')
-    }
+  if (!options || options.length < 2) {
+    throw new Error('Soal pilihan ganda harus memiliki minimal 2 pilihan jawaban')
   }
 
-  // Buat soal beserta options-nya sekaligus
+  const adaJawabanBenar = options.some(opt => opt.isCorrect === true)
+  if (!adaJawabanBenar) {
+    throw new Error('Harus ada minimal 1 jawaban yang benar')
+  }
+
   const questionBaru = await prisma.question.create({
     data: {
       evaluationId,
       pertanyaan,
-      tipe,
-      // Kalau pilihan ganda, buat options juga
-      options: tipe === 'pilihan_ganda' ? {
+      tipe: 'pilihan_ganda',
+      options: {
         create: options.map(opt => ({
           teksOpsi: opt.teksOpsi,
           isCorrect: opt.isCorrect || false
         }))
-      } : undefined
+      }
     },
     include: {
       options: true
@@ -137,11 +138,11 @@ const createQuestion = async (evaluationId, data) => {
 }
 
 // ================================================
-// SUBMIT JAWABAN — Guru submit jawaban evaluasi
+// SUBMIT JAWABAN — Auto-Grading & Rules Scoring
 // ================================================
 const submitJawaban = async (evaluationId, userId, data) => {
   const { jawaban } = data
-  // jawaban = array: [{ questionId, jawaban }]
+  // jawaban = array: [{ questionId, jawaban }] (jawaban berisi optionId)
 
   const evaluationAda = await prisma.evaluation.findUnique({
     where: { id: evaluationId },
@@ -156,8 +157,15 @@ const submitJawaban = async (evaluationId, userId, data) => {
     throw new Error('Evaluasi tidak ditemukan')
   }
 
-  // Proses setiap jawaban
-  const hasilJawaban = await Promise.all(
+  const totalSoal = evaluationAda.questions.length
+  if (totalSoal === 0) {
+    throw new Error('Evaluasi ini belum memiliki soal')
+  }
+
+  let totalBenar = 0
+
+  // 1. Simpan/Update Jawaban User & Hitung Skor Pilihan Ganda
+  await Promise.all(
     jawaban.map(async (item) => {
       const question = evaluationAda.questions.find(
         q => q.id === item.questionId
@@ -167,60 +175,105 @@ const submitJawaban = async (evaluationId, userId, data) => {
         throw new Error(`Soal dengan id ${item.questionId} tidak ditemukan`)
       }
 
-      let isCorrect = null
+      // Cek apakah Option ID yang dipilih bernilai true (isCorrect)
+      const pilihanBenar = question.options.find(
+        opt => opt.id === item.jawaban && opt.isCorrect
+      )
+      
+      const isCorrect = !!pilihanBenar
+      if (isCorrect) totalBenar++
 
-      // Kalau pilihan ganda, cek apakah jawaban benar
-      if (question.tipe === 'pilihan_ganda') {
-        const pilihanBenar = question.options.find(
-          opt => opt.id === item.jawaban && opt.isCorrect
-        )
-        isCorrect = !!pilihanBenar
-      }
-      // Kalau esai, isCorrect tetap null (dinilai manual oleh admin)
-
-      // Simpan jawaban ke database
-      // Pakai upsert supaya tidak duplikat kalau submit ulang
-      const userAnswer = await prisma.user_answers.upsert({
+      return prisma.user_answers.upsert({
         where: {
-            userId_questionId: {
+          userId_questionId: {
             userId,
             questionId: item.questionId
-            }
+          }
         },
         update: {
-            jawaban: item.jawaban,
-            isCorrect
+          jawaban: item.jawaban,
+          isCorrect
         },
         create: {
-            userId,
-            questionId: item.questionId,
-            jawaban: item.jawaban,
-            isCorrect
+          userId,
+          questionId: item.questionId,
+          jawaban: item.jawaban,
+          isCorrect
         }
-        })
-
-      return userAnswer
+      })
     })
   )
 
-  // Hitung skor untuk soal pilihan ganda
-  const soalPG = hasilJawaban.filter(j => j.isCorrect !== null)
-  const benar = soalPG.filter(j => j.isCorrect === true).length
-  const totalPG = soalPG.length
+  // 2. Kalkulasi Nilai
+  const skor = Math.round((totalBenar / totalSoal) * 100)
+  const passingScore = evaluationAda.passingScore || 80
+  const maxAttempts = evaluationAda.maxAttempts || 3
+  const isLolos = skor >= passingScore
 
+  // 3. Ambil / Update Status Progress User di Modul Ini
+  let progress = await prisma.user_progress.findUnique({
+    where: {
+      userId_moduleId: {
+        userId,
+        moduleId: evaluationAda.moduleId
+      }
+    }
+  })
+
+  let currentAttempts = (progress?.attempts || 0) + 1
+  let mustRepeat = false
+  let statusProgress = isLolos ? 'selesai' : 'sedang_belajar'
+
+  // Logika jika gagal & sudah melebihi/mencapai batas percobaan (3x)
+  if (!isLolos && currentAttempts >= maxAttempts) {
+    mustRepeat = true
+    statusProgress = 'belum_mulai' // Reset progress modul ke 'belum_mulai' agar baca ulang
+  }
+
+  if (progress) {
+    await prisma.user_progress.update({
+      where: { id: progress.id },
+      data: {
+        skor,
+        status: statusProgress,
+        attempts: mustRepeat ? 0 : currentAttempts,
+        completedAt: isLolos ? new Date() : null
+      }
+    })
+  } else {
+    await prisma.user_progress.create({
+      data: {
+        userId,
+        moduleId: evaluationAda.moduleId,
+        skor,
+        status: statusProgress,
+        attempts: mustRepeat ? 0 : currentAttempts,
+        completedAt: isLolos ? new Date() : null
+      }
+    })
+  }
+
+  // 4. Return Output Detail ke Frontend
   return {
-    totalSoal: jawaban.length,
-    totalPilihanGanda: totalPG,
-    benar,
-    skor: totalPG > 0 ? Math.round((benar / totalPG) * 100) : 0,
-    pesanEsai: jawaban.length > totalPG
-      ? 'Jawaban esai akan dinilai oleh admin'
-      : null
+    totalSoal,
+    benar: totalBenar,
+    salah: totalSoal - totalBenar,
+    skor,
+    passingScore,
+    isLolos,
+    percobaanKe: currentAttempts,
+    sisaPercobaan: Math.max(0, maxAttempts - currentAttempts),
+    mustRepeat,
+    pesan: isLolos
+      ? 'Selamat! Kamu lolos evaluasi modul ini.'
+      : mustRepeat
+      ? `Kamu telah gagal ${maxAttempts}x. Status modul di-reset, kamu harus mengulang mempelajari materi dari awal!`
+      : `Nilai kamu (${skor}) belum mencapai standar minimal (${passingScore}%). Sisa percobaan: ${maxAttempts - currentAttempts}`
   }
 }
 
 // ================================================
-// GET ANSWERS — Admin lihat semua jawaban di evaluasi
+// GET ANSWERS — Admin melihat seluruh hasil evaluasi
 // ================================================
 const getAnswersByEvaluation = async (evaluationId) => {
   const evaluationAda = await prisma.evaluation.findUnique({
@@ -241,18 +294,17 @@ const getAnswersByEvaluation = async (evaluationId) => {
       isCorrect: true,
       createdAt: true,
       user: {
-        select: { id: true, nama: true, email: true }
+        select: { id: true, nama: true, email: true, sekolah: true }
       },
       question: {
         select: {
           id: true,
           pertanyaan: true,
-          tipe: true,
           options: {
             select: {
               id: true,
               teksOpsi: true,
-              isCorrect: true // Admin boleh lihat jawaban benar
+              isCorrect: true // Admin dapat melihat mana opsi yang benar
             }
           }
         }
@@ -265,7 +317,7 @@ const getAnswersByEvaluation = async (evaluationId) => {
 }
 
 // ================================================
-// GET MY ANSWERS — Guru lihat jawaban dirinya sendiri
+// GET MY ANSWERS — User/Guru melihat riwayat jawabannya
 // ================================================
 const getMyAnswers = async (evaluationId, userId) => {
   const evaluationAda = await prisma.evaluation.findUnique({
@@ -290,12 +342,10 @@ const getMyAnswers = async (evaluationId, userId) => {
         select: {
           id: true,
           pertanyaan: true,
-          tipe: true,
           options: {
             select: {
               id: true,
               teksOpsi: true
-              // isCorrect tidak ditampilkan ke guru
             }
           }
         }
@@ -303,15 +353,13 @@ const getMyAnswers = async (evaluationId, userId) => {
     }
   })
 
-  // Hitung skor
-  const soalPG = answers.filter(a => a.isCorrect !== null)
-  const benar = soalPG.filter(a => a.isCorrect === true).length
-  const totalPG = soalPG.length
+  const benar = answers.filter(a => a.isCorrect === true).length
+  const total = answers.length
 
   return {
-    skor: totalPG > 0 ? Math.round((benar / totalPG) * 100) : 0,
+    skor: total > 0 ? Math.round((benar / total) * 100) : 0,
     benar,
-    totalPilihanGanda: totalPG,
+    totalSoal: total,
     jawaban: answers
   }
 }

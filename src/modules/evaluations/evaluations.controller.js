@@ -51,7 +51,7 @@ const getEvaluationById = async (req, res) => {
 const createEvaluation = async (req, res) => {
   try {
     const { moduleId } = req.params
-    const { judul } = req.body
+    const { judul, passingScore, maxAttempts } = req.body
 
     if (!judul) {
       return res.status(400).json({
@@ -62,7 +62,7 @@ const createEvaluation = async (req, res) => {
 
     const evaluationBaru = await evaluationsService.createEvaluation(
       moduleId,
-      { judul }
+      { judul, passingScore, maxAttempts }
     )
 
     return res.status(201).json({
@@ -80,32 +80,23 @@ const createEvaluation = async (req, res) => {
 }
 
 // ================================================
-// CREATE QUESTION — Hanya admin
+// CREATE QUESTION — Hanya admin (Murni Pilihan Ganda)
 // ================================================
 const createQuestion = async (req, res) => {
   try {
     const { id } = req.params
-    const { pertanyaan, tipe, options } = req.body
+    const { pertanyaan, options } = req.body
 
     // Validasi field wajib
-    if (!pertanyaan || !tipe) {
+    if (!pertanyaan) {
       return res.status(400).json({
         sukses: false,
-        pesan: 'Pertanyaan dan tipe wajib diisi'
+        pesan: 'Pertanyaan wajib diisi'
       })
     }
 
-    // Validasi tipe soal
-    const tipeValid = ['pilihan_ganda', 'esai']
-    if (!tipeValid.includes(tipe)) {
-      return res.status(400).json({
-        sukses: false,
-        pesan: 'Tipe soal harus "pilihan_ganda" atau "esai"'
-      })
-    }
-
-    // Kalau pilihan ganda, options wajib diisi
-    if (tipe === 'pilihan_ganda' && (!options || options.length < 2)) {
+    // Validasi opsi jawaban pilihan ganda
+    if (!options || !Array.isArray(options) || options.length < 2) {
       return res.status(400).json({
         sukses: false,
         pesan: 'Soal pilihan ganda wajib memiliki minimal 2 pilihan jawaban'
@@ -114,7 +105,6 @@ const createQuestion = async (req, res) => {
 
     const questionBaru = await evaluationsService.createQuestion(id, {
       pertanyaan,
-      tipe,
       options
     })
 
@@ -149,7 +139,7 @@ const submitJawaban = async (req, res) => {
       })
     }
 
-    // Validasi setiap item jawaban harus punya questionId dan jawaban
+    // Validasi setiap item jawaban harus punya questionId dan jawaban (optionId)
     const jawabanValid = jawaban.every(
       item => item.questionId && item.jawaban
     )

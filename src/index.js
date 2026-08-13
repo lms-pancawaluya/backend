@@ -10,6 +10,7 @@ const progressRoute = require('./modules/progress/progress.route')
 const checklistRoute = require('./modules/checklist/checklist.route')
 const miniQuizRoute = require('./modules/mini-quiz/mini-quiz.route')
 const uploadRoute = require('./modules/upload/upload.route')
+const feedbackRoute = require('./modules/feedback/feedback.route')
 
 const PORT = process.env.PORT || 3000
 
@@ -24,6 +25,7 @@ app.use('/api/progress', progressRoute)
 app.use('/api/checklist', checklistRoute)
 app.use('/api/mini-quizzes', miniQuizRoute)
 app.use('/api/upload', uploadRoute)
+app.use('/api/feedbacks', feedbackRoute)
 
 
 // Jalankan server

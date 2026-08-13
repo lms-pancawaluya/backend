@@ -1,6 +1,6 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -30,9 +30,9 @@ enum ContentType {
   video
 }
 
+// ⚠️ MODIFIKASI: Menghapus 'esai' agar Evaluasi murni Pilihan Ganda
 enum QuestionType {
   pilihan_ganda
-  esai
 }
 
 enum ProgressStatus {
@@ -53,26 +53,27 @@ enum UserStatus {
 // ==========================================
 
 model User {
-  id           String   @id @default(uuid())
+  id           String     @id @default(uuid())
   nama         String
-  email        String   @unique
+  email        String     @unique
   password     String
-  role         Role     @default(guru)
+  role         Role       @default(guru)
   status       UserStatus @default(aktif) @map("status")
-  nip          String?   @unique @map("nip")          
-  sekolah      String?  @map("sekolah")       
-  noHp         String?  @map("no_hp")         
-  fotoProfil   String?  @map("foto_profil") 
-  isVerified   Boolean   @default(false) @map("is_verified")
-  otpCode      String?   @map("otp_code") 
-  otpExpiresAt DateTime? @map("otp_expires_at")
-  gelar        String?  @map("gelar")
-  createdAt    DateTime @default(now()) @map("created_at")
+  nip          String?    @unique @map("nip")        
+  sekolah      String?    @map("sekolah")        
+  noHp         String?    @map("no_hp")         
+  fotoProfil   String?    @map("foto_profil") 
+  isVerified   Boolean    @default(false) @map("is_verified")
+  otpCode      String?    @map("otp_code") 
+  otpExpiresAt DateTime?  @map("otp_expires_at")
+  gelar        String?    @map("gelar")
+  createdAt    DateTime   @default(now()) @map("created_at")
 
   progress         user_progress[]
   answers          user_answers[]
   dailyChecklists  DailyChecklist[]
   miniQuizAttempts MiniQuizAttempt[]
+  feedbacks        Feedback[]        // ⚠️ RELASI BARU: Ke Tabel Feedback
 
   @@map("users")
 }
@@ -89,31 +90,35 @@ model Module {
   contents    Content[]
   evaluations Evaluation[]
   progress    user_progress[]
+  feedbacks   Feedback[]            // ⚠️ RELASI BARU: Ke Tabel Feedback
 
   @@map("modules")
 }
 
 model Content {
-  id        String      @id @default(uuid())
-  moduleId  String      @map("module_id")
-  judul     String
-  tipe      ContentType
-  konten    String      @db.Text
-  urutan    Int
-  createdAt DateTime    @default(now()) @map("created_at")
+  id             String      @id @default(uuid())
+  moduleId       String      @map("module_id")
+  judul          String
+  tipe           ContentType
+  konten         String      @db.Text
+  urutan         Int
+  showQuizAtSec  Int?        @map("show_quiz_at_sec") // ⚠️ FIELD BARU: Menit/detik munculnya mini quiz video
+  createdAt      DateTime    @default(now()) @map("created_at")
 
   // Relasi balik ke Module
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  module   Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   miniQuiz MiniQuiz?
 
   @@map("contents")
 }
 
 model Evaluation {
-  id        String   @id @default(uuid())
-  moduleId  String   @map("module_id")
-  judul     String
-  createdAt DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid())
+  moduleId     String   @map("module_id")
+  judul        String
+  passingScore Int      @default(80) @map("passing_score") // ⚠️ FIELD BARU: Minimal nilai (80%)
+  maxAttempts  Int      @default(3) @map("max_attempts")   // ⚠️ FIELD BARU: Batas gagal (3x)
+  createdAt    DateTime @default(now()) @map("created_at")
 
   // Relasi balik ke Module
   module    Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
@@ -126,7 +131,7 @@ model Question {
   id           String       @id @default(uuid())
   evaluationId String       @map("evaluation_id")
   pertanyaan   String       @db.Text
-  tipe         QuestionType
+  tipe         QuestionType @default(pilihan_ganda)
   createdAt    DateTime     @default(now()) @map("created_at")
 
   // Relasi
@@ -138,10 +143,10 @@ model Question {
 }
 
 model Option {
-  id         String   @id @default(uuid())
-  questionId String   @map("question_id")
-  teksOpsi   String   @map("teks_opsi") @db.Text
-  isCorrect  Boolean  @default(false) @map("is_correct")
+  id         String  @id @default(uuid())
+  questionId String  @map("question_id")
+  teksOpsi   String  @map("teks_opsi") @db.Text
+  isCorrect  Boolean @default(false) @map("is_correct")
 
   // Relasi
   question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -154,6 +159,8 @@ model user_progress {
   userId      String         @map("user_id")
   moduleId    String         @map("module_id")
   status      ProgressStatus @default(belum_mulai)
+  skor        Int?           @default(0)  // ⚠️ FIELD BARU: Menyimpan skor evaluasi akhir
+  attempts    Int            @default(0)  // ⚠️ FIELD BARU: Menghitung berapa kali percobaan
   completedAt DateTime?      @map("completed_at")
 
   // Relasi
@@ -181,16 +188,35 @@ model user_answers {
 }
 
 // ==========================================
+// TABEL BARU: SARAN & KRITIK (FEEDBACK)
+// ==========================================
+
+model Feedback {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  moduleId  String   @map("module_id")
+  saran     String   @db.Text
+  kritik    String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relasi
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@map("feedbacks")
+}
+
+// ==========================================
 // DAILY CHECKLIST
 // ==========================================
 
 model ChecklistItem {
-  id          String           @id @default(uuid())
-  aspek       AspekPancawaluya
-  deskripsi   String           @db.Text
-  urutan      Int
-  isActive    Boolean          @default(true) @map("is_active")
-  createdAt   DateTime         @default(now()) @map("created_at")
+  id        String           @id @default(uuid())
+  aspek     AspekPancawaluya
+  deskripsi String           @db.Text
+  urutan    Int
+  isActive  Boolean          @default(true) @map("is_active")
+  createdAt DateTime         @default(now()) @map("created_at")
 
   // Relasi
   dailyChecklists DailyChecklist[]
@@ -228,9 +254,9 @@ model MiniQuiz {
   createdAt    DateTime @default(now()) @map("created_at")
 
   // Relasi
-  content   Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content  Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
   questions MiniQuizQuestion[]
-  attempts  MiniQuizAttempt[]
+  attempts MiniQuizAttempt[]
 
   @@map("mini_quizzes")
 }

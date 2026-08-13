@@ -30,7 +30,6 @@ enum ContentType {
   video
 }
 
-// ⚠️ MODIFIKASI: Menghapus 'esai' agar Evaluasi murni Pilihan Ganda
 enum QuestionType {
   pilihan_ganda
 }
@@ -73,7 +72,7 @@ model User {
   answers          user_answers[]
   dailyChecklists  DailyChecklist[]
   miniQuizAttempts MiniQuizAttempt[]
-  feedbacks        Feedback[]        // ⚠️ RELASI BARU: Ke Tabel Feedback
+  feedbacks        Feedback[]
 
   @@map("users")
 }
@@ -90,24 +89,23 @@ model Module {
   contents    Content[]
   evaluations Evaluation[]
   progress    user_progress[]
-  feedbacks   Feedback[]            // ⚠️ RELASI BARU: Ke Tabel Feedback
+  feedbacks   Feedback[]
 
   @@map("modules")
 }
 
 model Content {
-  id             String      @id @default(uuid())
-  moduleId       String      @map("module_id")
-  judul          String
-  tipe           ContentType
-  konten         String      @db.Text
-  urutan         Int
-  showQuizAtSec  Int?        @map("show_quiz_at_sec") // ⚠️ FIELD BARU: Menit/detik munculnya mini quiz video
-  createdAt      DateTime    @default(now()) @map("created_at")
+  id        String      @id @default(uuid())
+  moduleId  String      @map("module_id")
+  judul     String
+  tipe      ContentType
+  konten    String      @db.Text // Berisi Teks Materi ATAU Link YouTube (https://www.youtube.com/watch?v=...)
+  urutan    Int
+  createdAt DateTime    @default(now()) @map("created_at")
 
-  // Relasi balik ke Module
-  module   Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  miniQuiz MiniQuiz?
+  // Relasi
+  module       Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  miniQuizzes  MiniQuiz[] // REVISI: Mengubah dari 1-to-1 menjadi 1-to-Many
 
   @@map("contents")
 }
@@ -116,11 +114,11 @@ model Evaluation {
   id           String   @id @default(uuid())
   moduleId     String   @map("module_id")
   judul        String
-  passingScore Int      @default(80) @map("passing_score") // ⚠️ FIELD BARU: Minimal nilai (80%)
-  maxAttempts  Int      @default(3) @map("max_attempts")   // ⚠️ FIELD BARU: Batas gagal (3x)
+  passingScore Int      @default(80) @map("passing_score")
+  maxAttempts  Int      @default(3) @map("max_attempts")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  // Relasi balik ke Module
+  // Relasi
   module    Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   questions Question[]
 
@@ -159,8 +157,8 @@ model user_progress {
   userId      String         @map("user_id")
   moduleId    String         @map("module_id")
   status      ProgressStatus @default(belum_mulai)
-  skor        Int?           @default(0)  // ⚠️ FIELD BARU: Menyimpan skor evaluasi akhir
-  attempts    Int            @default(0)  // ⚠️ FIELD BARU: Menghitung berapa kali percobaan
+  skor        Int?           @default(0)
+  attempts    Int            @default(0)
   completedAt DateTime?      @map("completed_at")
 
   // Relasi
@@ -188,7 +186,7 @@ model user_answers {
 }
 
 // ==========================================
-// TABEL BARU: SARAN & KRITIK (FEEDBACK)
+// TABEL FEEDBACK
 // ==========================================
 
 model Feedback {
@@ -246,17 +244,18 @@ model DailyChecklist {
 // ==========================================
 
 model MiniQuiz {
-  id           String   @id @default(uuid())
-  contentId    String   @unique @map("content_id")
-  judul        String
-  passingScore Int      @default(80) @map("passing_score")
-  maxAttempts  Int      @default(3) @map("max_attempts")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid())
+  contentId        String   @map("content_id") // REVISI: Menghapus @unique agar 1 konten bisa punya beberapa kuis
+  judul            String
+  timestampSeconds Int?     @map("timestamp_seconds") // REVISI: Dipindah dari Content. Detik munculnya pop-up quiz di video
+  passingScore     Int      @default(80) @map("passing_score")
+  maxAttempts      Int      @default(3) @map("max_attempts")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   // Relasi
-  content  Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content   Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
   questions MiniQuizQuestion[]
-  attempts MiniQuizAttempt[]
+  attempts  MiniQuizAttempt[]
 
   @@map("mini_quizzes")
 }
@@ -292,7 +291,7 @@ model MiniQuizAttempt {
   miniQuizId    String   @map("mini_quiz_id")
   attemptNumber Int      @map("attempt_number")
   skor          Int
-  isPassed      Boolean  @map("is_passed")
+  isLolos       Boolean  @map("is_lolos") // REVISI: Diubah dari isPassed menjadi isLolos
   createdAt     DateTime @default(now()) @map("created_at")
 
   // Relasi

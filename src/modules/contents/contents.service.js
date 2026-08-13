@@ -17,6 +17,20 @@ const getContentsByModule = async (moduleId) => {
 
   const contents = await prisma.content.findMany({
     where: { moduleId },
+    include: {
+      miniQuizzes: {
+        select: {
+          id: true,
+          judul: true,
+          timestampSeconds: true,
+          passingScore: true,
+          maxAttempts: true
+        },
+        orderBy: {
+          timestampSeconds: 'asc'
+        }
+      }
+    },
     orderBy: { urutan: 'asc' }
   })
 

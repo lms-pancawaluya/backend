@@ -1,61 +1,70 @@
 // src/modules/mini-quiz/mini-quiz.route.js
 
 const express = require('express')
-const router = express.Router({ mergeParams: true })
+const router = express.Router()
+
 const miniQuizController = require('./mini-quiz.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
 
 // ================================================
-// GET mini kuis by konten — Admin & Guru
+// ROUTE BERBASIS KONTEN (:contentId)
 // ================================================
-router.get('/',
+
+// GET mini kuis berdasarkan ID Konten — Admin & Guru
+// GET /api/mini-quizzes/content/:contentId
+router.get(
+  '/content/:contentId',
   authMiddleware,
   miniQuizController.getMiniQuizByContent
 )
 
-// ================================================
-// POST buat mini kuis — Admin only 
-// ================================================
-router.post('/',
+// POST buat mini kuis pada Konten tertentu — Admin only
+// POST /api/mini-quizzes/content/:contentId
+router.post(
+  '/content/:contentId',
   authMiddleware,
   roleMiddleware('admin'),
   miniQuizController.createMiniQuiz
 )
 
+// GET cek apakah konten berikutnya terkunci — Admin & Guru
+// GET /api/mini-quizzes/check-lock/:contentId
+router.get(
+  '/check-lock/:contentId',
+  authMiddleware,
+  miniQuizController.checkContentLock
+)
+
 // ================================================
-// POST tambah soal — Admin only
+// ROUTE BERBASIS MINI QUIZ (:id)
 // ================================================
-router.post('/:id/questions',
+
+// POST tambah soal ke mini kuis — Admin only
+// POST /api/mini-quizzes/:id/questions
+router.post(
+  '/:id/questions',
   authMiddleware,
   roleMiddleware('admin'),
   miniQuizController.createQuestion
 )
 
-// ================================================
-// GET riwayat percobaan — Guru
-// ================================================
-router.get('/:id/my-attempts',
+// GET riwayat percobaan guru pada mini kuis ini — Guru
+// GET /api/mini-quizzes/:id/my-attempts
+router.get(
+  '/:id/my-attempts',
   authMiddleware,
   roleMiddleware('guru'),
   miniQuizController.getMyAttempts
 )
 
-// ================================================
-// POST submit jawaban — Guru
-// ================================================
-router.post('/:id/attempt',
+// POST submit jawaban mini kuis — Guru
+// POST /api/mini-quizzes/:id/attempt
+router.post(
+  '/:id/attempt',
   authMiddleware,
   roleMiddleware('guru'),
   miniQuizController.submitAttempt
-)
-
-// ================================================
-// GET cek apakah konten terkunci — Admin & Guru
-// ================================================
-router.get('/check-lock/:contentId',
-  authMiddleware,
-  miniQuizController.checkContentLock
 )
 
 module.exports = router

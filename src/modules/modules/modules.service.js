@@ -29,7 +29,7 @@ const getAllModules = async () => {
 }
 
 // ================================================
-// GET MODULE BY ID — Ambil detail modul + konten
+// GET MODULE BY ID — Ambil detail modul + konten & mini quiz
 // ================================================
 const getModuleById = async (id) => {
   const module = await prisma.module.findUnique({
@@ -41,14 +41,26 @@ const getModuleById = async (id) => {
       aspekPancawaluya: true,
       urutan: true,
       createdAt: true,
-      // Ambil semua konten di modul ini
+      // Ambil semua konten di modul ini beserta mini kuisnya
       contents: {
         select: {
           id: true,
           judul: true,
           tipe: true,
           konten: true,
-          urutan: true
+          urutan: true,
+          miniQuizzes: {
+            select: {
+              id: true,
+              judul: true,
+              timestampSeconds: true,
+              passingScore: true,
+              maxAttempts: true
+            },
+            orderBy: {
+              timestampSeconds: 'asc'
+            }
+          }
         },
         orderBy: { urutan: 'asc' }
       },

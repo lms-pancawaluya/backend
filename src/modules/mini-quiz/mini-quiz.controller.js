@@ -8,21 +8,23 @@ const miniQuizService = require('./mini-quiz.service')
 const getMiniQuizByContent = async (req, res) => {
   try {
     const { contentId } = req.params
-    const miniQuiz = await miniQuizService.getMiniQuizByContent(contentId)
+    const miniQuizzes = await miniQuizService.getMiniQuizByContent(contentId)
 
-    // Kalau tidak ada mini kuis, return null (bukan error)
-    if (!miniQuiz) {
+    // Jika tidak ada kuis untuk konten ini
+    if (!miniQuizzes || miniQuizzes.length === 0) {
       return res.status(200).json({
         sukses: true,
         adaMiniKuis: false,
-        data: null
+        totalKuis: 0,
+        data: []
       })
     }
 
     return res.status(200).json({
       sukses: true,
       adaMiniKuis: true,
-      data: miniQuiz
+      totalKuis: miniQuizzes.length,
+      data: miniQuizzes
     })
 
   } catch (error) {
@@ -39,7 +41,7 @@ const getMiniQuizByContent = async (req, res) => {
 const createMiniQuiz = async (req, res) => {
   try {
     const { contentId } = req.params
-    const { judul, passingScore, maxAttempts } = req.body
+    const { judul, passingScore, maxAttempts, timestampSeconds } = req.body
 
     if (!judul) {
       return res.status(400).json({
@@ -62,9 +64,16 @@ const createMiniQuiz = async (req, res) => {
       })
     }
 
+    if (timestampSeconds !== undefined && timestampSeconds !== null && timestampSeconds < 0) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Timestamp video tidak boleh bernilai negatif'
+      })
+    }
+
     const miniQuizBaru = await miniQuizService.createMiniQuiz(
       contentId,
-      { judul, passingScore, maxAttempts }
+      { judul, passingScore, maxAttempts, timestampSeconds }
     )
 
     return res.status(201).json({
@@ -86,7 +95,7 @@ const createMiniQuiz = async (req, res) => {
 // ================================================
 const createQuestion = async (req, res) => {
   try {
-    const { id } = req.params
+    const { id } = req.params // miniQuizId
     const { pertanyaan, options } = req.body
 
     if (!pertanyaan) {
@@ -136,7 +145,7 @@ const createQuestion = async (req, res) => {
 const getMyAttempts = async (req, res) => {
   try {
     const userId = req.user.id
-    const { id } = req.params
+    const { id } = req.params // miniQuizId
 
     const hasil = await miniQuizService.getMyAttempts(userId, id)
 
@@ -159,10 +168,10 @@ const getMyAttempts = async (req, res) => {
 const submitAttempt = async (req, res) => {
   try {
     const userId = req.user.id
-    const { id } = req.params
+    const { id } = req.params // miniQuizId
     const { jawaban } = req.body
 
-    // Validasi jawaban
+    // Validasi input jawaban
     if (!jawaban || !Array.isArray(jawaban) || jawaban.length === 0) {
       return res.status(400).json({
         sukses: false,
@@ -170,7 +179,6 @@ const submitAttempt = async (req, res) => {
       })
     }
 
-    // Setiap jawaban harus punya questionId dan optionId
     const jawabanValid = jawaban.every(
       item => item.questionId && item.optionId
     )
@@ -186,6 +194,7 @@ const submitAttempt = async (req, res) => {
 
     return res.status(200).json({
       sukses: true,
+      pesan: hasil.pesan,
       data: hasil
     })
 

@@ -283,6 +283,54 @@ const getChecklistReport = async (days = 7) => {
   }
 }
 
+// ================================================
+// GET FOTO BUKTI — Admin lihat foto bukti per guru
+// ================================================
+const getFotoBukti = async (filters) => {
+  const { userId, tanggal, days = 7 } = filters
+
+  const startDate = tanggal
+    ? new Date(tanggal)
+    : new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+
+  startDate.setHours(0, 0, 0, 0)
+
+  const where = {
+    tanggal: { gte: startDate },
+    fotoBukti: { not: null }
+  }
+
+  if (userId) where.userId = userId
+
+  const fotoBukti = await prisma.dailyChecklist.findMany({
+    where,
+    select: {
+      id: true,
+      tanggal: true,
+      isChecked: true,
+      fotoBukti: true,
+      createdAt: true,
+      user: {
+        select: {
+          id: true,
+          nama: true,
+          email: true,
+          sekolah: true
+        }
+      },
+      checklistItem: {
+        select: {
+          aspek: true,
+          deskripsi: true
+        }
+      }
+    },
+    orderBy: { tanggal: 'desc' }
+  })
+
+  return fotoBukti
+}
+
 module.exports = {
   getChecklistItems,
   createChecklistItem,
@@ -291,5 +339,6 @@ module.exports = {
   getTodayChecklist,
   submitChecklist,
   getChecklistHistory,
-  getChecklistReport
+  getChecklistReport,
+  getFotoBukti
 }

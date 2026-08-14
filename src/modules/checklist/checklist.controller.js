@@ -229,6 +229,33 @@ const getChecklistReport = async (req, res) => {
   }
 }
 
+// ================================================
+// GET FOTO BUKTI — Admin lihat foto bukti
+// ================================================
+const getFotoBukti = async (req, res) => {
+  try {
+    const { userId, tanggal, days } = req.query
+
+    const fotoBukti = await checklistService.getFotoBukti({
+      userId,
+      tanggal,
+      days: days ? parseInt(days) : 7
+    })
+
+    return res.status(200).json({
+      sukses: true,
+      jumlah: fotoBukti.length,
+      data: fotoBukti
+    })
+
+  } catch (error) {
+    return res.status(500).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   getChecklistItems,
   createChecklistItem,
@@ -237,5 +264,6 @@ module.exports = {
   getTodayChecklist,
   submitChecklist,
   getChecklistHistory,
-  getChecklistReport
+  getChecklistReport,
+  getFotoBukti
 }

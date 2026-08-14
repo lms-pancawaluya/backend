@@ -8,7 +8,6 @@ const prisma = require('../../config/database')
 // ================================================
 const uploadFotoProfil = async (req, res) => {
   try {
-    // Cek apakah ada file yang diupload
     if (!req.file) {
       return res.status(400).json({
         sukses: false,
@@ -55,17 +54,23 @@ const uploadFotoBukti = async (req, res) => {
 
     const userId = req.user.id
 
-    // Upload ke Supabase Storage
-    const fotoUrl = await uploadService.uploadFotoBukti(req.file, userId)
+    // Upload ke Supabase Storage + validasi metadata
+    const hasil = await uploadService.uploadFotoBukti(req.file, userId)
 
     return res.status(200).json({
       sukses: true,
       pesan: 'Foto bukti berhasil diupload',
-      data: { fotoUrl }
+      data: {
+        fotoUrl: hasil.fotoUrl,
+        hasMetadata: hasil.hasMetadata,
+        tanggalFoto: hasil.tanggalFoto,
+        pesan: hasil.pesan
+      }
     })
 
   } catch (error) {
-    return res.status(500).json({
+    // Kalau foto tidak valid (bukan foto hari ini)
+    return res.status(400).json({
       sukses: false,
       pesan: error.message
     })

@@ -63,7 +63,7 @@ router.get('/history',
 )
 
 // ================================================
-// REPORT — Admin lihat rekap konsistensi
+// REPORT & BUKTI — Admin lihat rekap & foto bukti
 // ================================================
 
 // GET rekap konsistensi semua guru — Admin only
@@ -71,6 +71,13 @@ router.get('/report',
   authMiddleware,
   roleMiddleware('admin'),
   checklistController.getChecklistReport
+)
+
+// GET foto bukti checklist guru — Admin only
+router.get('/foto-bukti',
+  authMiddleware,
+  roleMiddleware('admin'),
+  checklistController.getFotoBukti
 )
 
 module.exports = router

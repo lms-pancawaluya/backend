@@ -8,7 +8,10 @@ const miniQuizService = require('./mini-quiz.service')
 const getMiniQuizByContent = async (req, res) => {
   try {
     const { contentId } = req.params
-    const miniQuizzes = await miniQuizService.getMiniQuizByContent(contentId)
+    // Mengambil role dari req.user yang di-set oleh authMiddleware
+    const role = req.user?.role 
+
+    const miniQuizzes = await miniQuizService.getMiniQuizByContent(contentId, role)
 
     if (!miniQuizzes || miniQuizzes.length === 0) {
       return res.status(200).json({

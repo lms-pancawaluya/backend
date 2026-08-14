@@ -310,6 +310,10 @@ const getFotoBukti = async (filters) => {
       isChecked: true,
       fotoBukti: true,
       createdAt: true,
+      takenAt: true,
+      latitude: true,
+      longitude: true,
+      isRealtime: true,
       user: {
         select: {
           id: true,

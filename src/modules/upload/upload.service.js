@@ -4,53 +4,61 @@ const supabase = require('../../config/supabase')
 const exifr = require('exifr')
 
 // ================================================
-// HELPER — Validasi metadata tanggal foto
+// HELPER — Validasi metadata tanggal foto (KETAT)
 // ================================================
 const validasiTanggalFoto = async (fileBuffer) => {
   try {
-    const metadata = await exifr.parse(fileBuffer)
+    const metadata = await exifr.parse(fileBuffer, ['DateTimeOriginal', 'latitude', 'longitude'])
 
-    // Kalau tidak ada metadata EXIF
-    // (foto dari WhatsApp, screenshot, dll)
+    // 1. TOLAK jika foto tidak punya metadata EXIF (foto WhatsApp, screenshot, dll)
     if (!metadata || !metadata.DateTimeOriginal) {
       return {
-        valid: true,
+        valid: false,
         hasMetadata: false,
-        pesan: 'Foto tidak memiliki metadata tanggal — diterima tapi ditandai'
+        pesan: 'Foto tidak memiliki metadata tanggal. Harap ambil foto secara langsung menggunakan kamera HP (bukan screenshot atau kiriman WhatsApp)!'
       }
     }
 
     const tanggalFoto = new Date(metadata.DateTimeOriginal)
     const hariIni = new Date()
 
-    // Cek apakah foto diambil hari ini
+    // 2. Cek apakah foto diambil HARI INI
     const samaTanggal =
       tanggalFoto.getFullYear() === hariIni.getFullYear() &&
       tanggalFoto.getMonth() === hariIni.getMonth() &&
       tanggalFoto.getDate() === hariIni.getDate()
 
+    // TOLAK jika foto bukan diambil hari ini
     if (!samaTanggal) {
+      const tanggalFormatted = tanggalFoto.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      })
       return {
         valid: false,
         hasMetadata: true,
         tanggalFoto: tanggalFoto.toISOString(),
-        pesan: `Foto harus diambil hari ini. Foto ini diambil pada: ${tanggalFoto.toLocaleDateString('id-ID')}`
+        pesan: `Foto tidak valid! Foto ini diambil pada ${tanggalFormatted}. Kamu wajib menggunakan foto yang diambil hari ini.`
       }
     }
 
+    // 3. LOLOS — Foto diambil hari ini & punya metadata
     return {
       valid: true,
       hasMetadata: true,
       tanggalFoto: tanggalFoto.toISOString(),
+      latitude: metadata.latitude || null,
+      longitude: metadata.longitude || null,
       pesan: 'Foto valid'
     }
 
   } catch (error) {
-    // Kalau gagal baca metadata → tetap izinkan
+    // TOLAK jika file korup / metadata tidak bisa dibaca
     return {
-      valid: true,
+      valid: false,
       hasMetadata: false,
-      pesan: 'Tidak bisa membaca metadata foto'
+      pesan: 'Gagal membaca metadata foto. Pastikan file berupa gambar JPG/PNG asli dari kamera.'
     }
   }
 }
@@ -85,7 +93,7 @@ const uploadFotoProfil = async (file, userId) => {
 // UPLOAD FOTO BUKTI CHECKLIST
 // ================================================
 const uploadFotoBukti = async (file, userId) => {
-  // 1. Validasi metadata tanggal foto
+  // 1. Validasi metadata tanggal foto (Akan throw error jika valid: false)
   const validasi = await validasiTanggalFoto(file.buffer)
 
   if (!validasi.valid) {
@@ -117,6 +125,8 @@ const uploadFotoBukti = async (file, userId) => {
     fotoUrl: urlData.publicUrl,
     hasMetadata: validasi.hasMetadata,
     tanggalFoto: validasi.tanggalFoto || null,
+    latitude: validasi.latitude || null,
+    longitude: validasi.longitude || null,
     pesan: validasi.pesan
   }
 }

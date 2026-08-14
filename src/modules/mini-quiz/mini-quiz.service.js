@@ -5,7 +5,9 @@ const prisma = require('../../config/database')
 // ================================================
 // GET MINI QUIZ BY CONTENT — Ambil mini kuis
 // ================================================
-const getMiniQuizByContent = async (contentId) => {
+const getMiniQuizByContent = async (contentId, role) => {
+  const isAdmin = role === 'admin'
+
   const miniQuizzes = await prisma.miniQuiz.findMany({
     where: { contentId },
     select: {
@@ -22,7 +24,10 @@ const getMiniQuizByContent = async (contentId) => {
           options: {
             select: {
               id: true,
-              teksOpsi: true
+              teksOpsi: true,
+              // Kunci: isCorrect hanya bernilai true/false untuk Admin, 
+              // untuk Guru/User field ini otomatis disembunyikan
+              isCorrect: isAdmin
             }
           }
         }

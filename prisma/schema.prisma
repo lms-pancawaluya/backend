@@ -15,6 +15,7 @@ generator client {
 enum Role {
   admin
   guru
+  pengajar // TAMBAHAN: Role Trainer/Pengajar
 }
 
 enum AspekPancawaluya {
@@ -23,6 +24,7 @@ enum AspekPancawaluya {
   bener
   pinter
   singer
+  umum // TAMBAHAN: Supaya fleksibel kalau ada modul tambahan
 }
 
 enum ContentType {
@@ -47,6 +49,12 @@ enum UserStatus {
   wafat
 }
 
+enum RtlStatus {
+  pending
+  disetujui
+  ditolak
+}
+
 // ==========================================
 // TABEL DATABASE (MODELS)
 // ==========================================
@@ -60,6 +68,8 @@ model User {
   status       UserStatus @default(aktif) @map("status")
   nip          String?    @unique @map("nip")        
   sekolah      String?    @map("sekolah")        
+  kota         String?    @map("kota")     // TAMBAHAN: Filter Per Kota
+  daerah       String?    @map("daerah")   // TAMBAHAN: Filter Per Daerah/Kecamatan
   noHp         String?    @map("no_hp")         
   fotoProfil   String?    @map("foto_profil") 
   isVerified   Boolean    @default(false) @map("is_verified")
@@ -68,28 +78,33 @@ model User {
   gelar        String?    @map("gelar")
   createdAt    DateTime   @default(now()) @map("created_at")
 
+  // Relasi
   progress         user_progress[]
   answers          user_answers[]
-  dailyChecklists  DailyChecklist[]
   miniQuizAttempts MiniQuizAttempt[]
   feedbacks        Feedback[]
+  comments         Comment[]        // TAMBAHAN: Komentar di materi/video
+  rtlSubmissions   RtlSubmission[]  // TAMBAHAN: Upload RTL
+  reviewedRtls     RtlSubmission[]  @relation("TrainerRtlReviewer") // RTL yang dinilai pengajar
+  createdMeetings  Meeting[]        @relation("CreatedMeetings")   // Meeting yang dibuat pengajar
 
   @@map("users")
 }
 
 model Module {
-  id               String           @id @default(uuid())
+  id               String            @id @default(uuid())
   judul            String
-  deskripsi        String           @db.Text
-  aspekPancawaluya AspekPancawaluya @map("aspek_pancawaluya")
+  deskripsi        String            @db.Text
+  aspekPancawaluya AspekPancawaluya? @default(umum) @map("aspek_pancawaluya") // REVISI: Dibuat opsional agar modul bebas
   urutan           Int
-  createdAt        DateTime         @default(now()) @map("created_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
 
   // Relasi ke tabel lain
-  contents    Content[]
-  evaluations Evaluation[]
-  progress    user_progress[]
-  feedbacks   Feedback[]
+  contents       Content[]
+  evaluations    Evaluation[]
+  progress       user_progress[]
+  feedbacks      Feedback[]
+  rtlSubmissions RtlSubmission[] // TAMBAHAN: RTL terikat pada modul
 
   @@map("modules")
 }
@@ -99,13 +114,14 @@ model Content {
   moduleId  String      @map("module_id")
   judul     String
   tipe      ContentType
-  konten    String      @db.Text // Berisi Teks Materi ATAU Link YouTube (https://www.youtube.com/watch?v=...)
+  konten    String      @db.Text // Teks Materi ATAU Link YouTube
   urutan    Int
   createdAt DateTime    @default(now()) @map("created_at")
 
   // Relasi
-  module       Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  miniQuizzes  MiniQuiz[] // REVISI: Mengubah dari 1-to-1 menjadi 1-to-Many
+  module      Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  miniQuizzes MiniQuiz[] 
+  comments    Comment[]  // TAMBAHAN: Fitur Komentar di bawah video/materi
 
   @@map("contents")
 }
@@ -133,7 +149,7 @@ model Question {
   createdAt    DateTime     @default(now()) @map("created_at")
 
   // Relasi
-  evaluation Evaluation   @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  evaluation Evaluation     @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
   options    Option[]
   answers    user_answers[]
 
@@ -170,12 +186,12 @@ model user_progress {
 }
 
 model user_answers {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  questionId String   @map("question_id")
-  jawaban    String   @db.Text
-  isCorrect  Boolean? @map("is_correct")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  questionId String  @map("question_id")
+  jawaban   String   @db.Text
+  isCorrect Boolean? @map("is_correct")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relasi
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -205,38 +221,66 @@ model Feedback {
 }
 
 // ==========================================
-// DAILY CHECKLIST
+// FITUR KOMENTAR (POIN 4)
 // ==========================================
 
-model ChecklistItem {
-  id        String           @id @default(uuid())
-  aspek     AspekPancawaluya
-  deskripsi String           @db.Text
-  urutan    Int
-  isActive  Boolean          @default(true) @map("is_active")
-  createdAt DateTime         @default(now()) @map("created_at")
+model Comment {
+  id        String   @id @default(uuid())
+  contentId String   @map("content_id")
+  userId    String   @map("user_id")
+  komentar  String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relasi
-  dailyChecklists DailyChecklist[]
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("checklist_items")
+  @@map("comments")
 }
 
-model DailyChecklist {
-  id              String   @id @default(uuid())
-  userId          String   @map("user_id")
-  checklistItemId String   @map("checklist_item_id")
-  tanggal         DateTime @db.Date
-  isChecked       Boolean  @default(false) @map("is_checked")
-  fotoBukti       String?  @map("foto_bukti") @db.Text
-  createdAt       DateTime @default(now()) @map("created_at")
+// ==========================================
+// FITUR UPLOAD RTL & SERTIFIKAT (POIN 3 & 7)
+// ==========================================
+
+model RtlSubmission {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  moduleId      String    @map("module_id")
+  filePdfUrl    String    @map("file_pdf_url") @db.Text
+  catatanGuru   String?   @map("catatan_guru") @db.Text
+  status        RtlStatus @default(pending)
+  catatanTrainer String?  @map("catatan_trainer") @db.Text
+  reviewedById  String?   @map("reviewed_by_id")
+  reviewedAt    DateTime? @map("reviewed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   // Relasi
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  checklistItem ChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade)
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module     Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  reviewedBy User?  @relation("TrainerRtlReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 
-  @@unique([userId, checklistItemId, tanggal])
-  @@map("daily_checklist")
+  @@unique([userId, moduleId])
+  @@map("rtl_submissions")
+}
+
+// ==========================================
+// FITUR JADWAL VIRTUAL MEETING (POIN 5 & 6)
+// ==========================================
+
+model Meeting {
+  id           String   @id @default(uuid())
+  judul        String
+  deskripsi    String?  @db.Text
+  linkMeeting  String   @map("link_meeting") @db.Text // Link Zoom / GMeet
+  waktuMulai   DateTime @map("waktu_mulai")
+  waktuSelesai DateTime @map("waktu_selesai")
+  createdById  String   @map("created_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relasi
+  createdBy User @relation("CreatedMeetings", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@map("meetings")
 }
 
 // ==========================================
@@ -245,9 +289,9 @@ model DailyChecklist {
 
 model MiniQuiz {
   id               String   @id @default(uuid())
-  contentId        String   @map("content_id") // REVISI: Menghapus @unique agar 1 konten bisa punya beberapa kuis
+  contentId        String   @map("content_id")
   judul            String
-  timestampSeconds Int?     @map("timestamp_seconds") // REVISI: Dipindah dari Content. Detik munculnya pop-up quiz di video
+  timestampSeconds Int?     @map("timestamp_seconds")
   passingScore     Int      @default(80) @map("passing_score")
   maxAttempts      Int      @default(3) @map("max_attempts")
   createdAt        DateTime @default(now()) @map("created_at")
@@ -291,7 +335,7 @@ model MiniQuizAttempt {
   miniQuizId    String   @map("mini_quiz_id")
   attemptNumber Int      @map("attempt_number")
   skor          Int
-  isLolos       Boolean  @map("is_lolos") // REVISI: Diubah dari isPassed menjadi isLolos
+  isLolos       Boolean  @map("is_lolos")
   createdAt     DateTime @default(now()) @map("created_at")
 
   // Relasi

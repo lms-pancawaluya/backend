@@ -88,6 +88,8 @@ model User {
   reviewedRtls     RtlSubmission[]  @relation("TrainerRtlReviewer") // RTL yang dinilai pengajar
   createdMeetings  Meeting[]        @relation("CreatedMeetings")   // Meeting yang dibuat pengajar
 
+  tickets       Ticket[]        @relation("UserTickets")
+  ticketReplies TicketReply[]   @relation("UserTicketReplies")
   @@map("users")
 }
 
@@ -344,4 +346,47 @@ model MiniQuizAttempt {
 
   @@unique([userId, miniQuizId, attemptNumber])
   @@map("mini_quiz_attempts")
+}
+
+// ==========================================
+// FITUR HELPDESK / TICKETING
+// ==========================================
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+model Ticket {
+  id           String       @id @default(uuid())
+  ticketNumber String       @unique @map("ticket_number")
+  userId       String       @map("user_id")
+  subject      String
+  category     String
+  description  String       @db.Text
+  status       TicketStatus @default(open)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  // Diberi nama relasi "UserTickets" sesuai dengan yang ada di model User
+  user    User          @relation("UserTickets", fields: [userId], references: [id], onDelete: Cascade)
+  replies TicketReply[]
+
+  @@map("tickets")
+}
+
+model TicketReply {
+  id        String   @id @default(uuid())
+  ticketId  String   @map("ticket_id")
+  senderId  String   @map("sender_id")
+  message   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Diberi nama relasi "UserTicketReplies" sesuai dengan yang ada di model User
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender User   @relation("UserTicketReplies", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("ticket_replies")
 }

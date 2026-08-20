@@ -12,6 +12,7 @@ const miniQuizRoute = require('./modules/mini-quiz/mini-quiz.route')
 const uploadRoute = require('./modules/upload/upload.route')
 const feedbackRoute = require('./modules/feedback/feedback.route')
 const adminMonitoringRoute = require('./modules/admin-monitoring/admin-monitoring.route')
+const helpdeskRoutes = require('./modules/helpdesk/helpdesk.routes')
 
 const PORT = process.env.PORT || 3000
 
@@ -28,6 +29,7 @@ app.use('/api/mini-quizzes', miniQuizRoute)
 app.use('/api/upload', uploadRoute)
 app.use('/api/feedbacks', feedbackRoute)
 app.use('/api/admin', adminMonitoringRoute)
+app.use('/api/helpdesk', helpdeskRoutes)
 
 
 

@@ -11,5 +11,10 @@ router.get('/module/:moduleId', authMiddleware, rtlController.getRtlByModule)
 // Endpoint Pengajar & Admin
 router.get('/submissions', authMiddleware, roleMiddleware('pengajar', 'admin'), rtlController.getAllRtlSubmissions)
 router.patch('/:rtlId/review', authMiddleware, roleMiddleware('pengajar', 'admin'), rtlController.reviewRtl)
+router.get('/:rtlId', authMiddleware, roleMiddleware('pengajar', 'admin'), rtlController.getRtlById)
+
+
+// DELETE submission RTL (Admin Only)
+router.delete('/:rtlId', authMiddleware, roleMiddleware('admin'), rtlController.deleteRtl)
 
 module.exports = router

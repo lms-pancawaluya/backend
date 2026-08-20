@@ -73,9 +73,45 @@ const reviewRtl = async (req, res) => {
   }
 }
 
+const getRtlById = async (req, res) => {
+  try {
+    const { rtlId } = req.params
+    const hasil = await rtlService.getRtlById(rtlId)
+
+    return res.status(200).json({
+      sukses: true,
+      data: hasil
+    })
+  } catch (error) {
+    return res.status(404).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+const deleteRtl = async (req, res) => {
+  try {
+    const { rtlId } = req.params
+    const hasil = await rtlService.deleteRtl(rtlId)
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: hasil.pesan
+    })
+  } catch (error) {
+    return res.status(404).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   uploadRtl,
   getRtlByModule,
   getAllRtlSubmissions,
-  reviewRtl
+  reviewRtl,
+  getRtlById, 
+  deleteRtl
 }

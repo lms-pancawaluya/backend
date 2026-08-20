@@ -89,9 +89,46 @@ const reviewRtl = async (rtlId, trainerId, data) => {
   return updatedRtl
 }
 
+// Get Detail RTL Berdasarkan ID (Admin / Pengajar)
+const getRtlById = async (rtlId) => {
+  const rtl = await prisma.rtlSubmission.findUnique({
+    where: { id: rtlId },
+    include: {
+      user: { select: { id: true, nama: true, email: true, sekolah: true, kota: true, daerah: true } },
+      module: { select: { id: true, judul: true } },
+      reviewedBy: { select: { id: true, nama: true, gelar: true } }
+    }
+  })
+
+  if (!rtl) {
+    throw new Error('Data submission RTL tidak ditemukan')
+  }
+
+  return rtl
+}
+
+// Hapus Submission RTL (Admin Only)
+const deleteRtl = async (rtlId) => {
+  const rtlAda = await prisma.rtlSubmission.findUnique({
+    where: { id: rtlId }
+  })
+
+  if (!rtlAda) {
+    throw new Error('Data submission RTL tidak ditemukan')
+  }
+
+  await prisma.rtlSubmission.delete({
+    where: { id: rtlId }
+  })
+
+  return { pesan: 'Data submission RTL berhasil dihapus' }
+}
+
 module.exports = {
   uploadRtl,
   getRtlByModule,
   getAllRtlSubmissions,
-  reviewRtl
+  reviewRtl,
+  getRtlById, 
+  deleteRtl
 }

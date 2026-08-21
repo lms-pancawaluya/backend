@@ -94,16 +94,16 @@ router.post(
 router.get(
   '/:id/my-attempts',
   authMiddleware,
-  roleMiddleware('guru'),
+  roleMiddleware('guru', 'pengajar'),
   miniQuizController.getMyAttempts
 )
 
-// POST submit jawaban mini kuis — Guru
+// POST submit jawaban mini kuis 
 // POST /api/mini-quizzes/:id/attempt
 router.post(
   '/:id/attempt',
   authMiddleware,
-  roleMiddleware('guru'),
+  roleMiddleware('guru', 'pengajar'),
   miniQuizController.submitAttempt
 )
 

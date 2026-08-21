@@ -1,22 +1,62 @@
-// src/modules/users/users.service.js
 const bcrypt = require('bcryptjs')
 const prisma = require('../../config/database')
 
 // ================================================
-// GET ALL USERS — Ambil semua guru
+// GET ALL USERS — Ambil semua user dengan Filter (Poin 2)
 // ================================================
-const getAllUsers = async () => {
+const getAllUsers = async (filters = {}) => {
+  const { sekolah, kota, daerah, status, search, role } = filters
+
+  const whereClause = {}
+
+  // Filter Role (default ambil semua, atau bisa difilter spesifik)
+  if (role) {
+    whereClause.role = role
+  }
+
+  // Filter Sekolah
+  if (sekolah) {
+    whereClause.sekolah = { contains: sekolah, mode: 'insensitive' }
+  }
+
+  // Filter Kota
+  if (kota) {
+    whereClause.kota = { contains: kota, mode: 'insensitive' }
+  }
+
+  // Filter Daerah / Kecamatan
+  if (daerah) {
+    whereClause.daerah = { contains: daerah, mode: 'insensitive' }
+  }
+
+  // Filter Status
+  if (status) {
+    whereClause.status = status
+  }
+
+  // Search Nama, NIP, atau Email
+  if (search) {
+    whereClause.OR = [
+      { nama: { contains: search, mode: 'insensitive' } },
+      { nip: { contains: search, mode: 'insensitive' } },
+      { email: { contains: search, mode: 'insensitive' } }
+    ]
+  }
+
   const users = await prisma.user.findMany({
+    where: whereClause,
     select: {
       id: true,
       nama: true,
       email: true,
       role: true,
-      gelar: true,   
-      nip: true,        
-      sekolah: true,    
-      noHp: true,       
-      fotoProfil: true, 
+      gelar: true,
+      nip: true,
+      sekolah: true,
+      kota: true,
+      daerah: true,
+      noHp: true,
+      fotoProfil: true,
       status: true,
       createdAt: true,
       progress: {
@@ -32,9 +72,11 @@ const getAllUsers = async () => {
     nama: user.nama,
     email: user.email,
     role: user.role,
-    gelar: user.gelar, 
+    gelar: user.gelar,
     nip: user.nip,
     sekolah: user.sekolah,
+    kota: user.kota,
+    daerah: user.daerah,
     noHp: user.noHp,
     fotoProfil: user.fotoProfil,
     status: user.status,
@@ -57,6 +99,8 @@ const getUserById = async (id) => {
       gelar: true,
       nip: true,
       sekolah: true,
+      kota: true,
+      daerah: true,
       noHp: true,
       fotoProfil: true,
       status: true,
@@ -84,12 +128,10 @@ const getUserById = async (id) => {
 }
 
 // ================================================
-// UPDATE USER — Update data guru
+// UPDATE USER — Update data user (Termasuk Role Pengajar)
 // ================================================
 const updateUser = async (id, data) => {
-  // Tambahkan 'role' di destructuring
-  const { nama, email, role, gelar, sekolah, noHp, fotoProfil, status } = data
-  // ⚠️ NIP sengaja tidak ada — tidak boleh diubah!
+  const { nama, email, role, gelar, sekolah, kota, daerah, noHp, fotoProfil, status } = data
 
   const userAda = await prisma.user.findUnique({
     where: { id }
@@ -99,14 +141,13 @@ const updateUser = async (id, data) => {
     throw new Error('User tidak ditemukan')
   }
 
-  // Objek penampung update
   const payloadToUpdate = {}
 
   if (nama) payloadToUpdate.nama = nama
-  
-  // Tambahkan handling role
+
+  // Fix: Tambahkan 'pengajar' di roleValid
   if (role) {
-    const roleValid = ['admin', 'guru']
+    const roleValid = ['admin', 'guru', 'pengajar']
     if (!roleValid.includes(role)) {
       throw new Error(`Role harus salah satu dari: ${roleValid.join(', ')}`)
     }
@@ -125,18 +166,19 @@ const updateUser = async (id, data) => {
 
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
   if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
+  if (kota !== undefined) payloadToUpdate.kota = kota
+  if (daerah !== undefined) payloadToUpdate.daerah = daerah
   if (noHp !== undefined) payloadToUpdate.noHp = noHp
   if (fotoProfil !== undefined) payloadToUpdate.fotoProfil = fotoProfil
 
-  // Penanganan status (Aman)
   if (status !== undefined && status !== null && status !== '') {
     const statusNormalized = String(status).toLowerCase()
     const statusValid = ['aktif', 'nonaktif', 'pensiun', 'wafat']
-    
+
     if (!statusValid.includes(statusNormalized)) {
       throw new Error(`Status harus salah satu dari: ${statusValid.join(', ')}`)
     }
-    
+
     payloadToUpdate.status = statusNormalized
   }
 
@@ -149,8 +191,10 @@ const updateUser = async (id, data) => {
       email: true,
       role: true,
       gelar: true,
-      nip: true,        
+      nip: true,
       sekolah: true,
+      kota: true,
+      daerah: true,
       noHp: true,
       fotoProfil: true,
       status: true,
@@ -162,10 +206,9 @@ const updateUser = async (id, data) => {
 }
 
 // ================================================
-// DELETE USER — Hapus akun guru
+// DELETE USER — Hapus akun user
 // ================================================
 const deleteUser = async (id) => {
-  // Cek apakah user ada
   const userAda = await prisma.user.findUnique({
     where: { id }
   })
@@ -174,8 +217,6 @@ const deleteUser = async (id) => {
     throw new Error('User tidak ditemukan')
   }
 
-  // Hapus user
-  // Progress & answers otomatis terhapus karena onDelete: Cascade
   await prisma.user.delete({
     where: { id }
   })
@@ -187,7 +228,6 @@ const deleteUser = async (id) => {
 // UPDATE PASSWORD
 // ================================================
 const updatePassword = async (id, passwordLama, passwordBaru) => {
-  // Ambil user dengan password
   const user = await prisma.user.findUnique({
     where: { id }
   })
@@ -196,16 +236,13 @@ const updatePassword = async (id, passwordLama, passwordBaru) => {
     throw new Error('User tidak ditemukan')
   }
 
-  // Verifikasi password lama
   const passwordCocok = await bcrypt.compare(passwordLama, user.password)
   if (!passwordCocok) {
     throw new Error('Password lama tidak sesuai')
   }
 
-  // Hash password baru
   const hashedPassword = await bcrypt.hash(passwordBaru, 10)
 
-  // Update password
   await prisma.user.update({
     where: { id },
     data: { password: hashedPassword }
@@ -213,7 +250,7 @@ const updatePassword = async (id, passwordLama, passwordBaru) => {
 }
 
 // ================================================
-// ADMIN RESET PASSWORD — Admin reset password guru
+// ADMIN RESET PASSWORD
 // ================================================
 const adminResetPassword = async (id, passwordBaru) => {
   const user = await prisma.user.findUnique({
@@ -224,7 +261,6 @@ const adminResetPassword = async (id, passwordBaru) => {
     throw new Error('User tidak ditemukan')
   }
 
-  // Pastikan yang direset adalah guru, bukan admin lain
   if (user.role === 'admin') {
     throw new Error('Tidak bisa reset password akun admin')
   }
@@ -236,14 +272,14 @@ const adminResetPassword = async (id, passwordBaru) => {
     data: { password: hashedPassword }
   })
 
-  return { pesan: `Password guru ${user.nama} berhasil direset oleh admin.` }
+  return { pesan: `Password user ${user.nama} berhasil direset.` }
 }
 
-module.exports = { 
+module.exports = {
   getAllUsers,
   getUserById,
   updateUser,
   deleteUser,
   updatePassword,
-  adminResetPassword 
+  adminResetPassword
 }

@@ -1,5 +1,3 @@
-// src/modules/users/users.route.js
-
 const express = require('express')
 const router = express.Router()
 const usersController = require('./users.controller')
@@ -10,55 +8,50 @@ const roleMiddleware = require('../../middlewares/role.middleware')
 // Semua route users butuh login (authMiddleware)
 // ================================================
 
-// GET /api/users — Hanya admin
+// GET /api/users — Admin & Pengajar (Bisa pake filter ?sekolah=...&kota=...&daerah=...)
 router.get('/',
   authMiddleware,
-  roleMiddleware('admin'),
+  roleMiddleware('admin', 'pengajar'),
   usersController.getAllUsers
 )
 
-// GET /api/users/:id — Admin & guru (guru hanya lihat diri sendiri)
+// ================================================
+// PROFILE ROUTES — Ditaruh di atas sebelum /:id
+// ================================================
+router.get('/profile/me',
+  authMiddleware,
+  usersController.getMyProfile
+)
+
+router.put('/profile/me',
+  authMiddleware,
+  usersController.updateMyProfile
+)
+
+router.put('/profile/me/password',
+  authMiddleware,
+  usersController.updatePassword
+)
+
+// ================================================
+// ID ROUTES (Dipasang di bawah)
+// ================================================
 router.get('/:id',
   authMiddleware,
   usersController.getUserById
 )
 
-// PUT /api/users/:id — Admin & guru (guru hanya update diri sendiri)
 router.put('/:id',
   authMiddleware,
   usersController.updateUser
 )
 
-// DELETE /api/users/:id — Hanya admin
 router.delete('/:id',
   authMiddleware,
   roleMiddleware('admin'),
   usersController.deleteUser
 )
 
-// ================================================
-// PROFILE ROUTES — Guru kelola profil sendiri
-// ================================================
-
-// GET profil sendiri
-router.get('/profile/me',
-  authMiddleware,
-  usersController.getMyProfile
-)
-
-// PUT update profil sendiri
-router.put('/profile/me',
-  authMiddleware,
-  usersController.updateMyProfile
-)
-
-// PUT ganti password
-router.put('/profile/me/password',
-  authMiddleware,
-  usersController.updatePassword
-)
-
-// PUT reset password guru — Hanya admin
 router.put('/:id/reset-password',
   authMiddleware,
   roleMiddleware('admin'),

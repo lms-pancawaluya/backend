@@ -1,13 +1,20 @@
-// src/modules/users/users.controller.js
-
 const usersService = require('./users.service')
 
 // ================================================
-// GET ALL USERS — Ambil semua guru
+// GET ALL USERS — Menerima Query Filter
 // ================================================
 const getAllUsers = async (req, res) => {
   try {
-    const users = await usersService.getAllUsers()
+    const { sekolah, kota, daerah, status, search, role } = req.query
+
+    const users = await usersService.getAllUsers({
+      sekolah,
+      kota,
+      daerah,
+      status,
+      search,
+      role
+    })
 
     return res.status(200).json({
       sukses: true,
@@ -24,15 +31,14 @@ const getAllUsers = async (req, res) => {
 }
 
 // ================================================
-// GET USER BY ID — Ambil detail satu user
+// GET USER BY ID
 // ================================================
 const getUserById = async (req, res) => {
   try {
     const { id } = req.params
 
-    // Cegah IDOR — guru hanya bisa lihat datanya sendiri
-    // Admin bisa lihat semua
-    if (req.user.role !== 'admin' && req.user.id !== id) {
+    // Admin & Pengajar bisa lihat semua, Guru hanya miliknya sendiri
+    if (!['admin', 'pengajar'].includes(req.user.role) && req.user.id !== id) {
       return res.status(403).json({
         sukses: false,
         pesan: 'Akses ditolak. Kamu tidak bisa melihat data user lain'
@@ -55,12 +61,12 @@ const getUserById = async (req, res) => {
 }
 
 // ================================================
-// UPDATE USER — Update data guru
+// UPDATE USER
 // ================================================
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params
-    const { nama, email, role, gelar, nip, sekolah, noHp, fotoProfil, status } = req.body // ← tambah role
+    const { nama, email, role, gelar, nip, sekolah, kota, daerah, noHp, fotoProfil, status } = req.body
 
     if (req.user.role !== 'admin' && req.user.id !== id) {
       return res.status(403).json({
@@ -76,13 +82,15 @@ const updateUser = async (req, res) => {
       })
     }
 
-    const userUpdated = await usersService.updateUser(id, { // ← ganti userId → id
+    const userUpdated = await usersService.updateUser(id, {
       nama,
       email,
       role,
       gelar,
       nip,
       sekolah,
+      kota,
+      daerah,
       noHp,
       fotoProfil,
       status
@@ -103,14 +111,12 @@ const updateUser = async (req, res) => {
 }
 
 // ================================================
-// DELETE USER — Hapus akun guru
+// DELETE USER
 // ================================================
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params
 
-    // Hanya admin yang bisa hapus user
-    // Sudah diproteksi di route, tapi double check di sini
     if (req.user.role !== 'admin') {
       return res.status(403).json({
         sukses: false,
@@ -118,7 +124,6 @@ const deleteUser = async (req, res) => {
       })
     }
 
-    // Admin tidak boleh hapus dirinya sendiri
     if (req.user.id === id) {
       return res.status(400).json({
         sukses: false,
@@ -142,7 +147,7 @@ const deleteUser = async (req, res) => {
 }
 
 // ================================================
-// GET MY PROFILE — Guru lihat profil sendiri
+// GET MY PROFILE
 // ================================================
 const getMyProfile = async (req, res) => {
   try {
@@ -163,19 +168,21 @@ const getMyProfile = async (req, res) => {
 }
 
 // ================================================
-// UPDATE MY PROFILE — Guru update profil sendiri
+// UPDATE MY PROFILE
 // ================================================
 const updateMyProfile = async (req, res) => {
   try {
     const userId = req.user.id
-    const { nama, email, gelar, nip, sekolah, noHp } = req.body // ← tambah gelar
+    const { nama, email, gelar, nip, sekolah, kota, daerah, noHp } = req.body
 
     const userUpdated = await usersService.updateUser(userId, {
       nama,
       email,
-      gelar,  // ← tambah gelar
+      gelar,
       nip,
       sekolah,
+      kota,
+      daerah,
       noHp
     })
 
@@ -194,7 +201,7 @@ const updateMyProfile = async (req, res) => {
 }
 
 // ================================================
-// UPDATE PASSWORD — Guru ganti password
+// UPDATE PASSWORD
 // ================================================
 const updatePassword = async (req, res) => {
   try {
@@ -231,7 +238,7 @@ const updatePassword = async (req, res) => {
 }
 
 // ================================================
-// ADMIN RESET PASSWORD — Admin reset password guru
+// ADMIN RESET PASSWORD
 // ================================================
 const adminResetPassword = async (req, res) => {
   try {
@@ -267,13 +274,13 @@ const adminResetPassword = async (req, res) => {
   }
 }
 
-module.exports = { 
-  getAllUsers, 
-  getUserById, 
-  updateUser, 
+module.exports = {
+  getAllUsers,
+  getUserById,
+  updateUser,
   deleteUser,
   getMyProfile,
   updateMyProfile,
   updatePassword,
-  adminResetPassword 
+  adminResetPassword
 }

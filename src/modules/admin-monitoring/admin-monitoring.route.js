@@ -9,14 +9,14 @@ const roleMiddleware = require('../../middlewares/role.middleware')
 router.get(
   '/users/:userId/progress',
   authMiddleware,
-  roleMiddleware('admin'),
+  roleMiddleware('admin', 'pengajar'),
   adminMonitoringController.getUserModuleProgress
 )
 
 router.get(
   '/users/:userId/evaluations',
   authMiddleware,
-  roleMiddleware('admin'),
+  roleMiddleware('admin', 'pengajar'),
   adminMonitoringController.getUserEvaluations
 )
 

@@ -5,12 +5,12 @@ const usersService = require('./users.service')
 // ================================================
 const getAllUsers = async (req, res) => {
   try {
-    const { sekolah, kota, daerah, status, search, role } = req.query
+    const { sekolah, kotaKab, kecamatan, status, search, role } = req.query
 
     const users = await usersService.getAllUsers({
       sekolah,
-      kota,
-      daerah,
+      kotaKab,
+      kecamatan,
       status,
       search,
       role
@@ -66,7 +66,7 @@ const getUserById = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params
-    const { nama, email, role, gelar, nip, sekolah, kota, daerah, noHp, fotoProfil, status } = req.body
+    const { nama, email, role, gelar, nip, sekolah, kotaKab, kecamatan, noHp, fotoProfil, status } = req.body
 
     if (req.user.role !== 'admin' && req.user.id !== id) {
       return res.status(403).json({
@@ -89,8 +89,8 @@ const updateUser = async (req, res) => {
       gelar,
       nip,
       sekolah,
-      kota,
-      daerah,
+      kotaKab,
+      kecamatan,
       noHp,
       fotoProfil,
       status
@@ -173,7 +173,7 @@ const getMyProfile = async (req, res) => {
 const updateMyProfile = async (req, res) => {
   try {
     const userId = req.user.id
-    const { nama, email, gelar, nip, sekolah, kota, daerah, noHp } = req.body
+    const { nama, email, gelar, nip, sekolah, kotaKab, kecamatan, noHp } = req.body
 
     const userUpdated = await usersService.updateUser(userId, {
       nama,
@@ -181,8 +181,8 @@ const updateMyProfile = async (req, res) => {
       gelar,
       nip,
       sekolah,
-      kota,
-      daerah,
+      kotaKab,
+      kecamatan,
       noHp
     })
 

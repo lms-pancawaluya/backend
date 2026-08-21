@@ -16,7 +16,7 @@ const generateOtp = () => {
 // REGISTER — Daftarkan user baru + kirim OTP
 // ================================================
 const register = async (data) => {
-  const { nama, email, password, gelar, nip } = data
+  const { nama, email, password, gelar, nip, sekolah, kotaKab, kecamatan } = data
 
   // 1. Cek apakah email sudah terdaftar
   const emailSudahAda = await prisma.user.findUnique({
@@ -51,7 +51,10 @@ const register = async (data) => {
       password: hashedPassword,
       role: 'guru',
       gelar: gelar || null,
-      nip: nip || null, 
+      nip: nip || null,
+      sekolah: sekolah || null,
+      kotaKab: kotaKab || null,
+      kecamatan: kecamatan || null,
       isVerified: false,
       otpCode,
       otpExpiresAt
@@ -62,7 +65,10 @@ const register = async (data) => {
       email: true,
       role: true,
       gelar: true,
-      nip: true,   
+      nip: true,
+      sekolah: true,
+      kotaKab: true,
+      kecamatan: true,
       isVerified: true,
       createdAt: true
     }

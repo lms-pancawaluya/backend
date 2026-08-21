@@ -8,7 +8,7 @@ const authService = require('./auth.service')
 const register = async (req, res) => {
   try {
     // 1. Ambil data dari request body (termasuk gelar & nip)
-    const { nama, email, password, gelar, nip } = req.body
+    const { nama, email, password, gelar, nip, sekolah, kotaKab, kecamatan } = req.body
 
     // 2. Validasi — pastikan semua field wajib diisi
     if (!nama || !email || !password) {
@@ -36,7 +36,7 @@ const register = async (req, res) => {
     }
 
     // 5. Panggil service untuk proses register (teruskan gelar & nip)
-    const hasil = await authService.register({ nama, email, password, gelar, nip })
+    const hasil = await authService.register({ nama, email, password, gelar, nip, sekolah, kotaKab, kecamatan })
 
     // 6. Kirim response sukses
     return res.status(201).json({
@@ -259,9 +259,10 @@ const adminResetPassword = async (req, res) => {
 // ================================================
 const getMe = async (req, res) => {
   try {
+    const user = await usersService.getUserById(req.user.id)
     return res.status(200).json({
       sukses: true,
-      data: req.user
+      data: user
     })
   } catch (error) {
     return res.status(500).json({

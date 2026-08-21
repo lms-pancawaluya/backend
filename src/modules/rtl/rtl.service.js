@@ -59,7 +59,7 @@ const getAllRtlSubmissions = async (filters) => {
   const rtlList = await prisma.rtlSubmission.findMany({
     where: whereClause,
     include: {
-      user: { select: { id: true, nama: true, sekolah: true, kota: true, daerah: true } },
+      user: { select: { id: true, nama: true, sekolah: true, kotaKab: true, kecamatan: true } },
       module: { select: { id: true, judul: true } }
     },
     orderBy: { createdAt: 'desc' }
@@ -94,7 +94,7 @@ const getRtlById = async (rtlId) => {
   const rtl = await prisma.rtlSubmission.findUnique({
     where: { id: rtlId },
     include: {
-      user: { select: { id: true, nama: true, email: true, sekolah: true, kota: true, daerah: true } },
+      user: { select: { id: true, nama: true, email: true, sekolah: true, kotaKab: true, kecamatan: true } },
       module: { select: { id: true, judul: true } },
       reviewedBy: { select: { id: true, nama: true, gelar: true } }
     }

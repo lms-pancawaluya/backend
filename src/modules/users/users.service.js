@@ -5,7 +5,7 @@ const prisma = require('../../config/database')
 // GET ALL USERS — Ambil semua user dengan Filter (Poin 2)
 // ================================================
 const getAllUsers = async (filters = {}) => {
-  const { sekolah, kota, daerah, status, search, role } = filters
+  const { sekolah, kotaKab, kecamatan, status, search, role } = filters
 
   const whereClause = {}
 
@@ -20,13 +20,13 @@ const getAllUsers = async (filters = {}) => {
   }
 
   // Filter Kota
-  if (kota) {
-    whereClause.kota = { contains: kota, mode: 'insensitive' }
+  if (kotaKab) {
+    whereClause.kotaKab = { contains: kotaKab, mode: 'insensitive' }
   }
 
   // Filter Daerah / Kecamatan
-  if (daerah) {
-    whereClause.daerah = { contains: daerah, mode: 'insensitive' }
+  if (kecamatan) {
+    whereClause.kecamatan = { contains: kecamatan, mode: 'insensitive' }
   }
 
   // Filter Status
@@ -53,8 +53,8 @@ const getAllUsers = async (filters = {}) => {
       gelar: true,
       nip: true,
       sekolah: true,
-      kota: true,
-      daerah: true,
+      kotaKab: true,
+      kecamatan: true,
       noHp: true,
       fotoProfil: true,
       status: true,
@@ -75,8 +75,8 @@ const getAllUsers = async (filters = {}) => {
     gelar: user.gelar,
     nip: user.nip,
     sekolah: user.sekolah,
-    kota: user.kota,
-    daerah: user.daerah,
+    kotaKab: user.kotaKab,
+    kecamatan: user.kecamatan,
     noHp: user.noHp,
     fotoProfil: user.fotoProfil,
     status: user.status,
@@ -99,8 +99,8 @@ const getUserById = async (id) => {
       gelar: true,
       nip: true,
       sekolah: true,
-      kota: true,
-      daerah: true,
+      kotaKab: true,
+      kecamatan: true,
       noHp: true,
       fotoProfil: true,
       status: true,
@@ -131,7 +131,7 @@ const getUserById = async (id) => {
 // UPDATE USER — Update data user (Termasuk Role Pengajar)
 // ================================================
 const updateUser = async (id, data) => {
-  const { nama, email, role, gelar, sekolah, kota, daerah, noHp, fotoProfil, status } = data
+  const { nama, email, role, gelar, sekolah, kotaKab, kecamatan, noHp, fotoProfil, status } = data
 
   const userAda = await prisma.user.findUnique({
     where: { id }
@@ -166,8 +166,8 @@ const updateUser = async (id, data) => {
 
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
   if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
-  if (kota !== undefined) payloadToUpdate.kota = kota
-  if (daerah !== undefined) payloadToUpdate.daerah = daerah
+  if (kotaKab !== undefined) payloadToUpdate.kotaKab = kotaKab
+  if (kecamatan !== undefined) payloadToUpdate.kecamatan = kecamatan
   if (noHp !== undefined) payloadToUpdate.noHp = noHp
   if (fotoProfil !== undefined) payloadToUpdate.fotoProfil = fotoProfil
 
@@ -193,8 +193,8 @@ const updateUser = async (id, data) => {
       gelar: true,
       nip: true,
       sekolah: true,
-      kota: true,
-      daerah: true,
+      kotaKab: true,
+      kecamatan: true,
       noHp: true,
       fotoProfil: true,
       status: true,

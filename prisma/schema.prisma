@@ -68,8 +68,8 @@ model User {
   status       UserStatus @default(aktif) @map("status")
   nip          String?    @unique @map("nip")        
   sekolah      String?    @map("sekolah")        
-  kota         String?    @map("kota")     // TAMBAHAN: Filter Per Kota
-  daerah       String?    @map("daerah")   // TAMBAHAN: Filter Per Daerah/Kecamatan
+  kotaKab      String?    @map("kota/kab")    // SESUAI SUPABASE
+  kecamatan    String?    @map("kecamatan")
   noHp         String?    @map("no_hp")         
   fotoProfil   String?    @map("foto_profil") 
   isVerified   Boolean    @default(false) @map("is_verified")
@@ -107,6 +107,7 @@ model Module {
   progress       user_progress[]
   feedbacks      Feedback[]
   rtlSubmissions RtlSubmission[] // TAMBAHAN: RTL terikat pada modul
+  comments       Comment[]
 
   @@map("modules")
 }
@@ -123,7 +124,6 @@ model Content {
   // Relasi
   module      Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   miniQuizzes MiniQuiz[] 
-  comments    Comment[]  // TAMBAHAN: Fitur Komentar di bawah video/materi
 
   @@map("contents")
 }
@@ -228,14 +228,14 @@ model Feedback {
 
 model Comment {
   id        String   @id @default(uuid())
-  contentId String   @map("content_id")
+  moduleId  String   @map("module_id")
   userId    String   @map("user_id")
   komentar  String   @db.Text
   createdAt DateTime @default(now()) @map("created_at")
 
-  // Relasi
-  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relasi mengarah ke Module
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("comments")
 }

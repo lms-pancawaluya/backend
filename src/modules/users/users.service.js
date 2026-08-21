@@ -2,39 +2,19 @@ const bcrypt = require('bcryptjs')
 const prisma = require('../../config/database')
 
 // ================================================
-// GET ALL USERS — Ambil semua user dengan Filter (Poin 2)
+// GET ALL USERS — Ambil semua user dengan Filter
 // ================================================
 const getAllUsers = async (filters = {}) => {
   const { sekolah, kotaKab, kecamatan, status, search, role } = filters
 
   const whereClause = {}
 
-  // Filter Role (default ambil semua, atau bisa difilter spesifik)
-  if (role) {
-    whereClause.role = role
-  }
+  if (role) whereClause.role = role
+  if (sekolah) whereClause.sekolah = { contains: sekolah, mode: 'insensitive' }
+  if (kotaKab) whereClause.kotaKab = { contains: kotaKab, mode: 'insensitive' }
+  if (kecamatan) whereClause.kecamatan = { contains: kecamatan, mode: 'insensitive' }
+  if (status) whereClause.status = status
 
-  // Filter Sekolah
-  if (sekolah) {
-    whereClause.sekolah = { contains: sekolah, mode: 'insensitive' }
-  }
-
-  // Filter Kota
-  if (kotaKab) {
-    whereClause.kotaKab = { contains: kotaKab, mode: 'insensitive' }
-  }
-
-  // Filter Daerah / Kecamatan
-  if (kecamatan) {
-    whereClause.kecamatan = { contains: kecamatan, mode: 'insensitive' }
-  }
-
-  // Filter Status
-  if (status) {
-    whereClause.status = status
-  }
-
-  // Search Nama, NIP, atau Email
   if (search) {
     whereClause.OR = [
       { nama: { contains: search, mode: 'insensitive' } },
@@ -128,9 +108,9 @@ const getUserById = async (id) => {
 }
 
 // ================================================
-// UPDATE USER — Update data user (Termasuk Role Pengajar)
+// UPDATE USER (BY ADMIN & PENGAJAR)
 // ================================================
-const updateUser = async (id, data) => {
+const updateUser = async (id, data, currentUser) => {
   const { nama, email, role, gelar, sekolah, kotaKab, kecamatan, noHp, fotoProfil, status } = data
 
   const userAda = await prisma.user.findUnique({
@@ -141,11 +121,15 @@ const updateUser = async (id, data) => {
     throw new Error('User tidak ditemukan')
   }
 
+  // Jika yang mengedit adalah Pengajar, Pengajar tidak boleh mengedit sesama Pengajar atau Admin
+  if (currentUser && currentUser.role === 'pengajar' && userAda.role !== 'guru') {
+    throw new Error('Akses ditolak. Pengajar hanya bisa mengubah data Guru.')
+  }
+
   const payloadToUpdate = {}
 
   if (nama) payloadToUpdate.nama = nama
 
-  // Fix: Tambahkan 'pengajar' di roleValid
   if (role) {
     const roleValid = ['admin', 'guru', 'pengajar']
     if (!roleValid.includes(role)) {
@@ -182,7 +166,7 @@ const updateUser = async (id, data) => {
     payloadToUpdate.status = statusNormalized
   }
 
-  const userUpdated = await prisma.user.update({
+  return await prisma.user.update({
     where: { id },
     data: payloadToUpdate,
     select: {
@@ -201,8 +185,55 @@ const updateUser = async (id, data) => {
       createdAt: true
     }
   })
+}
 
-  return userUpdated
+// ================================================
+// UPDATE MY PROFILE (DIBATASI KHUSUS ROLE GURU)
+// ================================================
+const updateMyProfile = async (userId, data, userRole) => {
+  const { nama, email, gelar, nip, sekolah, kotaKab, kecamatan, noHp } = data
+
+  const userAda = await prisma.user.findUnique({ where: { id: userId } })
+  if (!userAda) throw new Error('User tidak ditemukan')
+
+  const payloadToUpdate = {}
+
+  if (nama) payloadToUpdate.nama = nama
+  if (gelar !== undefined) payloadToUpdate.gelar = gelar
+  if (noHp !== undefined) payloadToUpdate.noHp = noHp
+
+  // REVISI: Hanya izinkan update sekolah & lokasi jika BUKAN GURU
+  if (userRole !== 'guru') {
+    if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
+    if (kotaKab !== undefined) payloadToUpdate.kotaKab = kotaKab
+    if (kecamatan !== undefined) payloadToUpdate.kecamatan = kecamatan
+  }
+
+  if (email && email !== userAda.email) {
+    const emailSudahAda = await prisma.user.findUnique({ where: { email } })
+    if (emailSudahAda) throw new Error('Email sudah digunakan user lain')
+    payloadToUpdate.email = email
+  }
+
+  return await prisma.user.update({
+    where: { id: userId },
+    data: payloadToUpdate,
+    select: {
+      id: true,
+      nama: true,
+      email: true,
+      role: true,
+      gelar: true,
+      nip: true,
+      sekolah: true,
+      kotaKab: true,
+      kecamatan: true,
+      noHp: true,
+      fotoProfil: true,
+      status: true,
+      createdAt: true
+    }
+  })
 }
 
 // ================================================
@@ -279,6 +310,7 @@ module.exports = {
   getAllUsers,
   getUserById,
   updateUser,
+  updateMyProfile,
   deleteUser,
   updatePassword,
   adminResetPassword

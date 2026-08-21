@@ -8,7 +8,7 @@ const roleMiddleware = require('../../middlewares/role.middleware')
 // Semua route users butuh login (authMiddleware)
 // ================================================
 
-// GET /api/users — Admin & Pengajar (Bisa pake filter ?sekolah=...&kota=...&daerah=...)
+// GET /api/users — Admin & Pengajar (Bisa pakai filter ?sekolah=...&kotaKab=...&kecamatan=...)
 router.get('/',
   authMiddleware,
   roleMiddleware('admin', 'pengajar'),
@@ -41,8 +41,10 @@ router.get('/:id',
   usersController.getUserById
 )
 
+// UPDATE: Admin & Pengajar bisa mengubah data user lain (misal: Pengajar ubah lokasi Guru)
 router.put('/:id',
   authMiddleware,
+  roleMiddleware('admin', 'pengajar'),
   usersController.updateUser
 )
 

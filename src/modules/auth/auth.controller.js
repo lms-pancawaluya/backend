@@ -1,6 +1,7 @@
 // src/modules/auth/auth.controller.js
 
 const authService = require('./auth.service')
+const usersService = require('../users/users.service')
 
 // ================================================
 // REGISTER

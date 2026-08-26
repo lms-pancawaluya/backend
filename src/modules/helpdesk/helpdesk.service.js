@@ -1,9 +1,11 @@
+// src/modules/helpdesk/helpdesk.service.js
+
 const prisma = require('../../config/database')
 
-// Generate nomor tiket otomatis (contoh: TKT-20260820-XXXX)
+// Generate nomor tiket otomatis yang lebih unik (contoh: TKT-20260826-A8K2)
 const generateTicketNumber = () => {
   const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '')
-  const randomStr = Math.floor(1000 + Math.random() * 9000)
+  const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase()
   return `TKT-${dateStr}-${randomStr}`
 }
 
@@ -106,6 +108,11 @@ const replyTicket = async (ticketId, senderId, userRole, data) => {
 
   if (!ticket) {
     throw new Error('Tiket tidak ditemukan')
+  }
+
+  // VALIDASI BARU: Tiket yang sudah closed tidak bisa dibalas
+  if (ticket.status === 'closed') {
+    throw new Error('Tiket sudah ditutup dan tidak dapat dibalas lagi')
   }
 
   if (userRole === 'guru' && ticket.userId !== senderId) {

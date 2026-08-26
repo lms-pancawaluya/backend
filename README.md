@@ -1,20 +1,20 @@
 # 📚 LMS Pancawaluya - Back-End API
 
-RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi memakai Node.js, Express, Prisma ORM, dan PostgreSQL Supabase; juga menyediakan JWT, OTP email, serta penyimpanan gambar di Supabase Storage.
+RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi menggunakan Node.js, Express, Prisma ORM, PostgreSQL Supabase, autentikasi JWT, email OTP, dan Supabase Storage.
 
 ---
 
 ## 🛠️ Tech Stack & Library
 
-- **Node.js** — runtime aplikasi (v18+ disarankan).
+- **Node.js** — runtime aplikasi; v18+ disarankan.
 - **Express 5** — server HTTP dan router API.
-- **Prisma ORM / Prisma Client** — skema, migrasi, dan akses database.
-- **PostgreSQL / Supabase** — database utama; Supabase juga menangani Storage.
-- **jsonwebtoken** dan **bcryptjs** — autentikasi JWT dan hashing password.
-- **Resend** — pengiriman email OTP registrasi serta reset password.
-- **Multer** dan **exifr** — unggahan gambar dan pembacaan metadata foto.
-- **Helmet** dan **CORS** — keamanan header dan pengaturan akses lintas origin.
-- **Nodemon** — hot reload untuk pengembangan.
+- **Prisma ORM / Prisma Client** — skema, migrasi, seed, dan akses database.
+- **PostgreSQL / Supabase** — database utama serta layanan penyimpanan berkas.
+- **jsonwebtoken** dan **bcryptjs** — token autentikasi dan hashing password.
+- **Resend** — pengiriman OTP registrasi dan reset password.
+- **Multer** — unggahan gambar profil serta dokumen RTL PDF.
+- **Helmet** dan **CORS** — keamanan header dan akses lintas origin.
+- **Nodemon** — hot reload saat pengembangan.
 
 ---
 
@@ -40,7 +40,7 @@ RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi me
    npm install
    ```
 
-3. Buat `.env` dari contoh yang tersedia.
+3. Salin `.env.example` ke `.env` lalu isi konfigurasinya.
 
    ```bash
    Copy-Item .env.example .env
@@ -74,7 +74,7 @@ RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi me
    EMAIL_PASS=your_gmail_app_password
    ```
 
-   `src/config/mailer.js` juga menggunakan Resend, sehingga tambahkan variabel berikut. `EMAIL_USER` dan `EMAIL_PASS` masih berada di `.env.example`, tetapi tidak digunakan oleh mailer saat ini.
+   Konfigurasi mailer juga membaca `RESEND_API_KEY`; tambahkan variabel berikut agar pengiriman OTP berfungsi. `EMAIL_USER` dan `EMAIL_PASS` masih tersedia di `.env.example`, tetapi tidak dipakai oleh mailer saat ini.
 
    ```env
    RESEND_API_KEY=re_your_resend_api_key
@@ -92,34 +92,31 @@ RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi me
    npm run dev
    ```
 
-   Server berjalan pada `PORT` atau port bawaan `3000`.
-
 ---
 
 ## 🔒 Otentikasi & Otorisasi Role
 
-Role yang tersedia pada database adalah `admin` dan `guru`. Admin mengelola pengguna, modul, konten, evaluasi, checklist, dan monitoring. Guru mempelajari modul, mengerjakan kuis/evaluasi, mengisi checklist, dan mengelola profil sendiri.
+Role yang tersedia adalah `admin`, `guru`, dan `pengajar`.
 
-Setiap endpoint yang tidak berlabel **Publik** membutuhkan JWT yang valid.
+- **Admin** mengelola pengguna, modul, konten, evaluasi, monitoring, submission RTL, dan tiket bantuan.
+- **Guru** mempelajari modul, mengerjakan kuis/evaluasi, mengirim komentar, mengunggah RTL, dan membuat tiket bantuan.
+- **Pengajar** meninjau RTL, memantau data pengguna, menangani tiket bantuan, serta mengakses riwayat dan pengerjaan mini kuis bersama guru.
+
+Setiap endpoint yang tidak berlabel **Publik** membutuhkan JWT valid.
 
 ```http
 Authorization: Bearer <JWT_TOKEN>
 ```
 
-`authMiddleware` memverifikasi token lalu memuat `id`, `nama`, `email`, dan `role` pengguna dari database. Label **Terautentikasi** di bawah berarti route hanya memasang middleware ini tanpa pembatasan role tambahan.
+Label **Terautentikasi** berarti router hanya memasang `authMiddleware` dan tidak memiliki pembatasan role tambahan.
 
 ---
 
 ## 📖 Ringkasan Dokumentasi API Endpoint
 
-Parameter `:id`, `:moduleId`, `:contentId`, `:questionId`, dan `:userId` adalah parameter path.
+Parameter seperti `:id`, `:moduleId`, `:contentId`, `:questionId`, `:userId`, `:rtlId`, dan `:ticketId` adalah parameter path.
 
-### Dasar
-
-- `GET /` `(Publik)`
-  *Deskripsi:* Memeriksa status server API.
-
-### Autentikasi
+### Autentikasi — `/api/auth`
 
 - `POST /api/auth/register` `(Publik)`
   *Deskripsi:* Mendaftarkan akun dan mengirim OTP verifikasi.
@@ -128,7 +125,7 @@ Parameter `:id`, `:moduleId`, `:contentId`, `:questionId`, dan `:userId` adalah 
 - `POST /api/auth/resend-otp` `(Publik)`
   *Deskripsi:* Mengirim ulang OTP pendaftaran.
 - `POST /api/auth/login` `(Publik)`
-  *Deskripsi:* Login dengan `identifier` (email/NIP; field `email` juga didukung) dan password.
+  *Deskripsi:* Login memakai `identifier` (email atau NIP; field `email` juga didukung) dan password.
 - `POST /api/auth/forgot-password` `(Publik)`
   *Deskripsi:* Mengirim OTP reset password melalui email.
 - `POST /api/auth/verify-reset-otp` `(Publik)`
@@ -136,32 +133,30 @@ Parameter `:id`, `:moduleId`, `:contentId`, `:questionId`, dan `:userId` adalah 
 - `POST /api/auth/reset-password` `(Publik)`
   *Deskripsi:* Mengganti password setelah verifikasi reset.
 - `GET /api/auth/me` `(Terautentikasi)`
-  *Deskripsi:* Mengambil data user dari token yang telah diverifikasi.
+  *Deskripsi:* Mengambil data pengguna dari token terverifikasi.
 - `PUT /api/auth/admin/reset-password/:userId` `(Terautentikasi)`
-  *Deskripsi:* Mereset password user berdasarkan ID. Route ini tidak memasang pembatasan role admin.
+  *Deskripsi:* Mereset password pengguna berdasarkan ID; route ini tidak memasang pembatasan role admin.
 
-### Pengguna
+### Pengguna — `/api/users`
 
-- `GET /api/users/` `(Admin)`
-  *Deskripsi:* Mengambil seluruh pengguna.
-- `GET /api/users/:id` `(Terautentikasi; guru hanya dirinya sendiri)`
-  *Deskripsi:* Mengambil detail pengguna.
-- `PUT /api/users/:id` `(Terautentikasi; guru hanya dirinya sendiri)`
-  *Deskripsi:* Memperbarui pengguna; hanya admin dapat mengubah role.
+- `GET /api/users/` `(Admin atau Pengajar)`
+  *Deskripsi:* Mengambil seluruh pengguna; mendukung query `sekolah`, `kotaKab`, `kecamatan`, `status`, `search`, dan `role`.
+- `GET /api/users/profile/me` `(Terautentikasi)`
+  *Deskripsi:* Mengambil profil pengguna saat ini.
+- `PUT /api/users/profile/me` `(Terautentikasi)`
+  *Deskripsi:* Memperbarui profil sendiri. Role `guru` tidak dapat mengubah `sekolah`, `kotaKab`, dan `kecamatan`.
+- `PUT /api/users/profile/me/password` `(Terautentikasi)`
+  *Deskripsi:* Mengganti password pengguna saat ini.
+- `GET /api/users/:id` `(Terautentikasi)`
+  *Deskripsi:* Mengambil detail pengguna; admin dan pengajar dapat melihat semua pengguna, guru hanya dapat melihat dirinya sendiri.
+- `PUT /api/users/:id` `(Admin atau Pengajar)`
+  *Deskripsi:* Memperbarui data pengguna. Pengajar hanya dapat mengubah data guru, sedangkan perubahan `role` hanya dapat dilakukan admin.
 - `DELETE /api/users/:id` `(Admin)`
   *Deskripsi:* Menghapus pengguna selain akun admin yang sedang dipakai.
-- `GET /api/users/profile/me` `(Terautentikasi)`
-  *Deskripsi:* Route terdaftar untuk mengambil profil sendiri.
-- `PUT /api/users/profile/me` `(Terautentikasi)`
-  *Deskripsi:* Route terdaftar untuk memperbarui profil sendiri.
-- `PUT /api/users/profile/me/password` `(Terautentikasi)`
-  *Deskripsi:* Mengganti password sendiri.
 - `PUT /api/users/:id/reset-password` `(Admin)`
   *Deskripsi:* Mereset password pengguna.
 
-> **Catatan:** `GET /api/users/:id` dan `PUT /api/users/:id` didefinisikan sebelum `/profile/me`. Karena urutan Express, `GET` dan `PUT /api/users/profile/me` tertangkap sebagai `:id = profile`. Route `/profile/me/password` tetap dapat dicapai.
-
-### Modul Pembelajaran
+### Modul Pembelajaran — `/api/modules`
 
 - `GET /api/modules/` `(Terautentikasi)`
   *Deskripsi:* Mengambil semua modul.
@@ -174,9 +169,9 @@ Parameter `:id`, `:moduleId`, `:contentId`, `:questionId`, dan `:userId` adalah 
 - `DELETE /api/modules/:id` `(Admin)`
   *Deskripsi:* Menghapus modul.
 
-### Konten Modul
+### Konten Modul — `/api/contents`
 
-Router konten tersedia sebagai route nested yang fungsional dan juga dipasang langsung pada `/api/contents`.
+Router konten juga dipasang secara nested pada `/api/modules/:moduleId/contents`.
 
 - `GET /api/modules/:moduleId/contents/` `(Terautentikasi)`
   *Deskripsi:* Mengambil seluruh konten pada modul.
@@ -187,22 +182,22 @@ Router konten tersedia sebagai route nested yang fungsional dan juga dipasang la
 - `DELETE /api/modules/:moduleId/contents/:id` `(Admin)`
   *Deskripsi:* Menghapus konten.
 - `GET /api/contents/` `(Terautentikasi)`
-  *Deskripsi:* Route langsung; controller mengharapkan parameter `moduleId` yang tidak tersedia dari mount ini.
+  *Deskripsi:* Route langsung untuk mengambil konten; controller menggunakan parameter `moduleId`.
 - `POST /api/contents/` `(Admin)`
-  *Deskripsi:* Route langsung; controller mengharapkan parameter `moduleId`.
+  *Deskripsi:* Route langsung untuk membuat konten; controller menggunakan parameter `moduleId`.
 - `PUT /api/contents/:id` `(Admin)`
   *Deskripsi:* Memperbarui konten berdasarkan ID.
 - `DELETE /api/contents/:id` `(Admin)`
   *Deskripsi:* Menghapus konten berdasarkan ID.
 
-### Evaluasi Modul
+### Evaluasi Modul — `/api/evaluations`
 
-Router evaluasi terdaftar baik di bawah modul maupun langsung pada `/api/evaluations`.
+Router evaluasi juga dipasang secara nested pada `/api/modules/:moduleId/evaluations`.
 
 - `GET /api/modules/:moduleId/evaluations/` `(Terautentikasi)`
   *Deskripsi:* Mengambil evaluasi pada modul.
 - `GET /api/modules/:moduleId/evaluations/:id` `(Terautentikasi)`
-  *Deskripsi:* Mengambil evaluasi dan soal.
+  *Deskripsi:* Mengambil detail evaluasi beserta soal.
 - `POST /api/modules/:moduleId/evaluations/` `(Admin)`
   *Deskripsi:* Membuat evaluasi pada modul.
 - `POST /api/modules/:moduleId/evaluations/:id/questions` `(Admin)`
@@ -214,15 +209,15 @@ Router evaluasi terdaftar baik di bawah modul maupun langsung pada `/api/evaluat
 - `POST /api/modules/:moduleId/evaluations/:id/submit` `(Guru)`
   *Deskripsi:* Mengirim jawaban evaluasi untuk dinilai.
 - `GET /api/modules/:moduleId/evaluations/:id/answers` `(Admin)`
-  *Deskripsi:* Mengambil jawaban seluruh user pada evaluasi.
+  *Deskripsi:* Mengambil jawaban semua pengguna pada evaluasi.
 - `GET /api/modules/:moduleId/evaluations/:id/my-answers` `(Terautentikasi)`
-  *Deskripsi:* Mengambil jawaban user saat ini.
+  *Deskripsi:* Mengambil jawaban pengguna saat ini.
 - `GET /api/evaluations/` `(Terautentikasi)`
-  *Deskripsi:* Route langsung; controller mengharapkan `moduleId` parameter.
+  *Deskripsi:* Route langsung untuk mengambil evaluasi; controller menggunakan parameter `moduleId`.
 - `GET /api/evaluations/:id` `(Terautentikasi)`
-  *Deskripsi:* Mengambil evaluasi dan soal.
+  *Deskripsi:* Mengambil detail evaluasi beserta soal.
 - `POST /api/evaluations/` `(Admin)`
-  *Deskripsi:* Route langsung; controller mengharapkan `moduleId` parameter.
+  *Deskripsi:* Route langsung untuk membuat evaluasi; controller menggunakan parameter `moduleId`.
 - `POST /api/evaluations/:id/questions` `(Admin)`
   *Deskripsi:* Menambahkan soal evaluasi.
 - `PUT /api/evaluations/questions/:questionId` `(Admin)`
@@ -232,52 +227,46 @@ Router evaluasi terdaftar baik di bawah modul maupun langsung pada `/api/evaluat
 - `POST /api/evaluations/:id/submit` `(Guru)`
   *Deskripsi:* Mengirim jawaban evaluasi.
 - `GET /api/evaluations/:id/answers` `(Admin)`
-  *Deskripsi:* Mengambil semua jawaban evaluasi.
+  *Deskripsi:* Mengambil jawaban seluruh pengguna pada evaluasi.
 - `GET /api/evaluations/:id/my-answers` `(Terautentikasi)`
-  *Deskripsi:* Mengambil jawaban user saat ini.
+  *Deskripsi:* Mengambil jawaban pengguna saat ini.
 
-### Progress Belajar
+### Progress Belajar — `/api/progress`
 
 - `GET /api/progress/` `(Admin atau Guru)`
-  *Deskripsi:* Mengambil semua progress milik user yang sedang login.
+  *Deskripsi:* Mengambil seluruh progress pengguna saat ini.
 - `GET /api/progress/summary` `(Terautentikasi)`
-  *Deskripsi:* Mengambil ringkasan progress seluruh modul milik user saat ini.
+  *Deskripsi:* Mengambil ringkasan progress seluruh modul pengguna saat ini.
 - `POST /api/progress/:moduleId/start` `(Admin atau Guru)`
-  *Deskripsi:* Memulai modul untuk user saat ini.
+  *Deskripsi:* Memulai modul untuk pengguna saat ini.
 - `POST /api/progress/:moduleId/complete` `(Admin atau Guru)`
-  *Deskripsi:* Menandai modul selesai untuk user saat ini.
+  *Deskripsi:* Menandai modul selesai untuk pengguna saat ini.
 - `GET /api/progress/:moduleId` `(Terautentikasi)`
-  *Deskripsi:* Mengambil progress pada satu modul.
+  *Deskripsi:* Mengambil progress pengguna pada satu modul.
 
-### Checklist Harian
+### Rencana Tindak Lanjut — `/api/rtl`
 
-- `GET /api/checklist/items` `(Terautentikasi)`
-  *Deskripsi:* Mengambil template item checklist.
-- `POST /api/checklist/items` `(Admin)`
-  *Deskripsi:* Membuat template item.
-- `PUT /api/checklist/items/:id` `(Admin)`
-  *Deskripsi:* Memperbarui template item.
-- `DELETE /api/checklist/items/:id` `(Admin)`
-  *Deskripsi:* Menghapus template item.
-- `GET /api/checklist/today` `(Admin atau Guru)`
-  *Deskripsi:* Mengambil checklist hari ini bagi user saat ini.
-- `POST /api/checklist/today` `(Admin atau Guru)`
-  *Deskripsi:* Menyimpan checklist hari ini.
-- `GET /api/checklist/history` `(Admin atau Guru)`
-  *Deskripsi:* Mengambil riwayat checklist; mendukung query `days`.
-- `GET /api/checklist/report` `(Admin)`
-  *Deskripsi:* Mengambil rekap konsistensi guru; mendukung query `days`.
-- `GET /api/checklist/foto-bukti` `(Admin)`
-  *Deskripsi:* Mengambil foto bukti; mendukung query `userId`, `tanggal`, dan `days`.
+- `POST /api/rtl/upload` `(Terautentikasi)`
+  *Deskripsi:* Menyimpan submission RTL pengguna saat ini, termasuk URL PDF dan data modul.
+- `GET /api/rtl/module/:moduleId` `(Terautentikasi)`
+  *Deskripsi:* Mengambil RTL pengguna saat ini pada modul tertentu.
+- `GET /api/rtl/submissions` `(Pengajar atau Admin)`
+  *Deskripsi:* Mengambil seluruh submission RTL; mendukung query `status` dan `moduleId`.
+- `PATCH /api/rtl/:rtlId/review` `(Pengajar atau Admin)`
+  *Deskripsi:* Meninjau RTL dengan status `disetujui` atau `ditolak` serta `catatanTrainer`.
+- `GET /api/rtl/:rtlId` `(Pengajar atau Admin)`
+  *Deskripsi:* Mengambil detail satu submission RTL.
+- `DELETE /api/rtl/:rtlId` `(Admin)`
+  *Deskripsi:* Menghapus submission RTL.
 
-### Mini Kuis
+### Mini Kuis — `/api/mini-quizzes`
 
 - `GET /api/mini-quizzes/content/:contentId` `(Terautentikasi)`
   *Deskripsi:* Mengambil mini kuis pada konten.
 - `POST /api/mini-quizzes/content/:contentId` `(Admin)`
   *Deskripsi:* Membuat mini kuis pada konten.
 - `GET /api/mini-quizzes/content/:contentId/check-lock` `(Terautentikasi)`
-  *Deskripsi:* Memeriksa status penguncian konten bagi user saat ini.
+  *Deskripsi:* Memeriksa status penguncian konten bagi pengguna saat ini.
 - `PUT /api/mini-quizzes/questions/:id` `(Admin)`
   *Deskripsi:* Memperbarui soal mini kuis.
 - `DELETE /api/mini-quizzes/questions/:id` `(Admin)`
@@ -285,55 +274,73 @@ Router evaluasi terdaftar baik di bawah modul maupun langsung pada `/api/evaluat
 - `PUT /api/mini-quizzes/:id` `(Admin)`
   *Deskripsi:* Memperbarui header mini kuis.
 - `DELETE /api/mini-quizzes/:id` `(Admin)`
-  *Deskripsi:* Menghapus mini kuis dan seluruh soalnya.
+  *Deskripsi:* Menghapus mini kuis beserta soal-soalnya.
 - `POST /api/mini-quizzes/:id/questions` `(Admin)`
-  *Deskripsi:* Menambahkan soal mini kuis.
-- `GET /api/mini-quizzes/:id/my-attempts` `(Guru)`
-  *Deskripsi:* Mengambil riwayat percobaan user saat ini.
-- `POST /api/mini-quizzes/:id/attempt` `(Guru)`
+  *Deskripsi:* Menambahkan soal pada mini kuis.
+- `GET /api/mini-quizzes/:id/my-attempts` `(Guru atau Pengajar)`
+  *Deskripsi:* Mengambil riwayat percobaan pengguna saat ini.
+- `POST /api/mini-quizzes/:id/attempt` `(Guru atau Pengajar)`
   *Deskripsi:* Mengirim jawaban dan mencatat percobaan mini kuis.
 
-Router mini kuis yang sama juga dipasang pada setiap router konten. Seluruh sepuluh endpoint di atas **juga terdaftar** pada kedua prefiks berikut, dengan metode, parameter sufiks, akses, dan perilaku yang sama:
+Router mini kuis yang sama juga tersedia melalui mount konten berikut:
 
 ```text
 /api/contents/:contentId/mini-quiz
 /api/modules/:moduleId/contents/:contentId/mini-quiz
 ```
 
-Sebagai contoh, endpoint attempt yang terdaftar adalah:
+Kedua mount tersebut menggunakan metode, sufiks route, dan hak akses yang sama dengan daftar mini kuis di atas.
 
-- `POST /api/contents/:contentId/mini-quiz/:id/attempt` `(Guru)`
-  *Deskripsi:* Mengirim jawaban mini kuis melalui mount konten langsung.
-- `POST /api/modules/:moduleId/contents/:contentId/mini-quiz/:id/attempt` `(Guru)`
-  *Deskripsi:* Mengirim jawaban mini kuis melalui mount konten dalam modul.
+### Unggah Berkas — `/api/upload`
 
-Untuk endpoint berbasis konten pada kedua prefiks tersebut, sufiks router tetap `/content/:contentId`, `/content/:contentId/check-lock`, dan `POST /content/:contentId`.
-
-### Umpan Balik
-
-- `POST /api/feedbacks/module/:moduleId` `(Terautentikasi)`
-  *Deskripsi:* Mengirim saran dan kritik untuk modul; route tidak membatasi role ke guru.
-- `GET /api/feedbacks/` `(Admin)`
-  *Deskripsi:* Mengambil seluruh saran dan kritik.
-
-### Unggah Berkas
-
-Kedua route menerima `multipart/form-data` dengan field file bernama `foto`, hanya untuk JPEG, PNG, atau WebP, maksimal 5 MB.
+Endpoint menggunakan `multipart/form-data`; format yang diterima adalah JPEG, PNG, WebP, dan PDF.
 
 - `POST /api/upload/foto-profil` `(Terautentikasi)`
-  *Deskripsi:* Mengunggah foto profil ke Storage dan memperbarui `fotoProfil` user.
-- `POST /api/upload/foto-bukti` `(Terautentikasi)`
-  *Deskripsi:* Mengunggah foto bukti checklist dan memvalidasi metadata foto.
+  *Deskripsi:* Mengunggah gambar profil melalui field `foto`, lalu memperbarui `fotoProfil` pengguna. Batas fitur profil adalah 5 MB.
+- `POST /api/upload/rtl` `(Terautentikasi)`
+  *Deskripsi:* Mengunggah dokumen RTL PDF melalui field `file` ke bucket `rtl-files`; batas ukuran Multer saat ini 10 MB.
 
-### Monitoring Admin
+> **Catatan implementasi:** Multer saat ini memakai batas global 10 MB. Karena itu, batas 5 MB untuk foto profil belum diterapkan secara terpisah pada source.
 
-- `GET /api/admin/users/:userId/progress` `(Admin)`
-  *Deskripsi:* Mengambil progress modul seorang user.
-- `GET /api/admin/users/:userId/evaluations` `(Admin)`
-  *Deskripsi:* Mengambil data evaluasi seorang user.
+### Umpan Balik — `/api/feedbacks`
+
+- `POST /api/feedbacks/module/:moduleId` `(Terautentikasi)`
+  *Deskripsi:* Mengirim saran dan kritik untuk modul.
+- `GET /api/feedbacks/` `(Admin)`
+  *Deskripsi:* Mengambil seluruh saran dan kritik modul.
+
+### Monitoring — `/api/admin`
+
+- `GET /api/admin/users/:userId/progress` `(Admin atau Pengajar)`
+  *Deskripsi:* Mengambil progress modul seorang pengguna.
+- `GET /api/admin/users/:userId/evaluations` `(Admin atau Pengajar)`
+  *Deskripsi:* Mengambil data evaluasi seorang pengguna.
+
+### Helpdesk — `/api/helpdesk`
+
+- `POST /api/helpdesk/tickets` `(Terautentikasi)`
+  *Deskripsi:* Membuat tiket bantuan.
+- `GET /api/helpdesk/tickets/my` `(Terautentikasi)`
+  *Deskripsi:* Mengambil seluruh tiket milik pengguna saat ini.
+- `GET /api/helpdesk/tickets` `(Admin atau Pengajar)`
+  *Deskripsi:* Mengambil seluruh tiket bantuan.
+- `PATCH /api/helpdesk/tickets/:ticketId/status` `(Admin atau Pengajar)`
+  *Deskripsi:* Memperbarui status tiket.
+- `GET /api/helpdesk/tickets/:ticketId` `(Pemilik tiket, Admin, atau Pengajar)`
+  *Deskripsi:* Mengambil detail tiket.
+- `POST /api/helpdesk/tickets/:ticketId/replies` `(Pemilik tiket, Admin, atau Pengajar)`
+  *Deskripsi:* Menambahkan balasan pada tiket.
+
+### Komentar Modul — `/api/comments`
+
+- `POST /api/comments` `(Terautentikasi)`
+  *Deskripsi:* Mengirim komentar yang terikat pada `moduleId`.
+- `GET /api/comments/module/:moduleId` `(Terautentikasi)`
+  *Deskripsi:* Mengambil komentar modul dengan urutan terbaru terlebih dahulu.
+- `DELETE /api/comments/:id` `(Pemilik komentar atau Admin)`
+  *Deskripsi:* Menghapus komentar milik sendiri; admin dapat menghapus komentar apa pun.
 
 ---
-
 
 ## 📝 Lisensi
 

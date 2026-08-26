@@ -1,24 +1,23 @@
-// src/modules/upload/upload.route.js
-
 const express = require('express')
 const router = express.Router()
 const multer = require('multer')
 const uploadController = require('./upload.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 
-// ================================================
-// Setup Multer — simpan file di memory (buffer)
-// ================================================
 const storage = multer.memoryStorage()
 
 const fileFilter = (req, file, cb) => {
-  // Hanya izinkan file gambar
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp']
+  const allowedMimes = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'application/pdf' // Ditambahkan untuk Dokumen RTL
+  ]
 
   if (allowedMimes.includes(file.mimetype)) {
-    cb(null, true) // izinkan
+    cb(null, true)
   } else {
-    cb(new Error('Hanya file JPG, PNG, dan WebP yang diizinkan'), false)
+    cb(new Error('Hanya file Gambar (JPG, PNG, WebP) atau PDF yang diizinkan'), false)
   }
 }
 
@@ -26,26 +25,22 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // maksimal 5MB
+    fileSize: 10 * 1024 * 1024 // Max 10MB (PDF RTL biasanya butuh limit lebih besar dari foto)
   }
 })
 
-// ================================================
 // POST upload foto profil
-// ================================================
 router.post('/foto-profil',
   authMiddleware,
-  upload.single('foto'), // 'foto' = nama field di form
+  upload.single('foto'),
   uploadController.uploadFotoProfil
 )
 
-// ================================================
-// POST upload foto bukti checklist
-// ================================================
-router.post('/foto-bukti',
+// POST upload file PDF RTL
+router.post('/rtl',
   authMiddleware,
-  upload.single('foto'),
-  uploadController.uploadFotoBukti
+  upload.single('file'),
+  uploadController.uploadRtl
 )
 
 module.exports = router

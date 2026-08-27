@@ -54,7 +54,7 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
       fotoProfil: true,
       status: true,
       createdAt: true,
-      user_progress: {
+      progress: {
         where: { status: 'selesai' },
         select: { id: true }
       }
@@ -63,7 +63,7 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
   })
 
   return users.map(user => {
-    const userProgressList = user.user_progress || []
+    const userProgressList = user.progress || []
     return {
       id: user.id,
       nama: user.nama,
@@ -103,7 +103,7 @@ const getUserById = async (id) => {
       fotoProfil: true,
       status: true,
       createdAt: true,
-      user_progress: {
+      progress: {
         select: {
           status: true,
           completedAt: true,

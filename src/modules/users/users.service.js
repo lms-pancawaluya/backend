@@ -14,9 +14,21 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
     // Pengajar HANYA BISA melihat akun bertipe 'guru'
     whereClause.role = 'guru'
     
-    // Pengajar HANYA BISA melihat guru dari sekolahnya sendiri
-    if (currentUser.sekolah) {
-      whereClause.sekolah = currentUser.sekolah
+    let sekolahPengajar = currentUser.sekolah
+
+    // Fallback: Jika di payload token JWT belum/tidak ada data sekolah, 
+    // tarik langsung data sekolah pengajar dari Database
+    if (!sekolahPengajar && currentUser.id) {
+      const dbPengajar = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { sekolah: true }
+      })
+      sekolahPengajar = dbPengajar?.sekolah
+    }
+
+    // Filter guru yang berasal dari sekolah yang sama dengan pengajar
+    if (sekolahPengajar) {
+      whereClause.sekolah = sekolahPengajar
     }
   } else {
     // Untuk Admin / role lain: gunakan query param role jika ada

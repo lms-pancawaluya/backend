@@ -114,7 +114,71 @@ const getUserEvaluations = async (userId) => {
   }
 }
 
+// Ambil progress SEMUA guru sekaligus dalam 2 query
+const getAllUsersModuleProgress = async () => {
+  // Query 1: Ambil semua modul terurut
+  const allModules = await prisma.module.findMany({
+    orderBy: { urutan: 'asc' },
+    select: { id: true, judul: true, urutan: true }
+  })
+
+  // Query 2: Ambil semua user role 'guru' beserta user_progress-nya
+  const users = await prisma.user.findMany({
+    where: { role: 'guru' },
+    select: {
+      id: true,
+      nama: true,
+      email: true,
+      user_progress: {
+        select: {
+          moduleId: true,
+          status: true,
+          skor: true,
+          completedAt: true
+        }
+      }
+    }
+  })
+
+  // Mapping data di memori Node.js
+  return users.map(user => {
+    // FIX: Gunakan user.user_progress (bukan user.progress)
+    const userProgressList = user.user_progress || []
+    const progressMap = new Map(userProgressList.map(p => [p.moduleId, p]))
+    let modulSelesaiCount = 0
+
+    const moduls = allModules.map(module => {
+      const progress = progressMap.get(module.id)
+      const isSelesai = progress?.status === 'selesai'
+      if (isSelesai) modulSelesaiCount++
+
+      return {
+        moduleId: module.id,
+        judul: module.judul,
+        urutan: module.urutan,
+        status: progress ? progress.status : 'belum_mulai',
+        skor: progress?.skor || 0,
+        completedAt: progress?.completedAt || null
+      }
+    })
+
+    const totalModul = allModules.length
+    const persentase = totalModul > 0 ? Math.round((modulSelesaiCount / totalModul) * 100) : 0
+
+    return {
+      userId: user.id,
+      namaGuru: user.nama,
+      emailGuru: user.email,
+      totalModul,
+      modulSelesai: modulSelesaiCount,
+      persentase,
+      moduls
+    }
+  })
+}
+
 module.exports = {
   getUserModuleProgress,
-  getUserEvaluations
+  getUserEvaluations,
+  getAllUsersModuleProgress
 }

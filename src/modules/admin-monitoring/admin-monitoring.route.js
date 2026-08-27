@@ -5,6 +5,14 @@ const adminMonitoringController = require('./admin-monitoring.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
 
+
+// Endpoint Bulk Progress Semua Guru (Pasang di atas /users/:userId/progress)
+router.get(
+  '/users/progress/all',
+  authMiddleware,
+  roleMiddleware('admin', 'pengajar'),
+  adminMonitoringController.getAllUsersModuleProgress
+)
 // Hanya Admin yang bisa akses
 router.get(
   '/users/:userId/progress',

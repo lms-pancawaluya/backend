@@ -36,7 +36,25 @@ const getUserEvaluations = async (req, res) => {
   }
 }
 
+const getAllUsersModuleProgress = async (req, res) => {
+  try {
+    const data = await adminMonitoringService.getAllUsersModuleProgress()
+
+    return res.status(200).json({
+      sukses: true,
+      jumlah: data.length,
+      data
+    })
+  } catch (error) {
+    return res.status(500).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   getUserModuleProgress,
-  getUserEvaluations
+  getUserEvaluations,
+  getAllUsersModuleProgress
 }

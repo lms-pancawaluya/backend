@@ -14,7 +14,7 @@ const getAllUsers = async (req, res) => {
       status,
       search,
       role
-    })
+    }, req.user)
 
     return res.status(200).json({
       sukses: true,

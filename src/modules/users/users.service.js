@@ -2,15 +2,30 @@ const bcrypt = require('bcryptjs')
 const prisma = require('../../config/database')
 
 // ================================================
-// GET ALL USERS — Ambil semua user dengan Filter
+// GET ALL USERS — Ambil semua user dengan Filter & Scope Role
 // ================================================
-const getAllUsers = async (filters = {}) => {
+const getAllUsers = async (filters = {}, currentUser = {}) => {
   const { sekolah, kotaKab, kecamatan, status, search, role } = filters
 
   const whereClause = {}
 
-  if (role) whereClause.role = role
-  if (sekolah) whereClause.sekolah = { contains: sekolah, mode: 'insensitive' }
+  // 1. LOGIKA SCOPING UNTUK ROLE PENGAJAR
+  if (currentUser.role === 'pengajar') {
+    // Pengajar HANYA BISA melihat akun bertipe 'guru'
+    whereClause.role = 'guru'
+    
+    // Pengajar HANYA BISA melihat guru dari sekolahnya sendiri
+    if (currentUser.sekolah) {
+      whereClause.sekolah = currentUser.sekolah
+    }
+  } else {
+    // Untuk Admin / role lain: gunakan query param role jika ada
+    if (role) whereClause.role = role
+    // Gunakan query param sekolah jika ada (hanya untuk Admin)
+    if (sekolah) whereClause.sekolah = { contains: sekolah, mode: 'insensitive' }
+  }
+
+  // 2. Filter opsional lainnya
   if (kotaKab) whereClause.kotaKab = { contains: kotaKab, mode: 'insensitive' }
   if (kecamatan) whereClause.kecamatan = { contains: kecamatan, mode: 'insensitive' }
   if (status) whereClause.status = status
@@ -39,7 +54,7 @@ const getAllUsers = async (filters = {}) => {
       fotoProfil: true,
       status: true,
       createdAt: true,
-      progress: {
+      user_progress: {
         where: { status: 'selesai' },
         select: { id: true }
       }
@@ -47,22 +62,25 @@ const getAllUsers = async (filters = {}) => {
     orderBy: { createdAt: 'desc' }
   })
 
-  return users.map(user => ({
-    id: user.id,
-    nama: user.nama,
-    email: user.email,
-    role: user.role,
-    gelar: user.gelar,
-    nip: user.nip,
-    sekolah: user.sekolah,
-    kotaKab: user.kotaKab,
-    kecamatan: user.kecamatan,
-    noHp: user.noHp,
-    fotoProfil: user.fotoProfil,
-    status: user.status,
-    createdAt: user.createdAt,
-    modulSelesai: user.progress.length
-  }))
+  return users.map(user => {
+    const userProgressList = user.user_progress || []
+    return {
+      id: user.id,
+      nama: user.nama,
+      email: user.email,
+      role: user.role,
+      gelar: user.gelar,
+      nip: user.nip,
+      sekolah: user.sekolah,
+      kotaKab: user.kotaKab,
+      kecamatan: user.kecamatan,
+      noHp: user.noHp,
+      fotoProfil: user.fotoProfil,
+      status: user.status,
+      createdAt: user.createdAt,
+      modulSelesai: userProgressList.length
+    }
+  })
 }
 
 // ================================================
@@ -85,7 +103,7 @@ const getUserById = async (id) => {
       fotoProfil: true,
       status: true,
       createdAt: true,
-      progress: {
+      user_progress: {
         select: {
           status: true,
           completedAt: true,
@@ -202,7 +220,7 @@ const updateMyProfile = async (userId, data, userRole) => {
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
   if (noHp !== undefined) payloadToUpdate.noHp = noHp
 
-  // REVISI: Hanya izinkan update sekolah & lokasi jika BUKAN GURU
+  // Hanya izinkan update sekolah & lokasi jika BUKAN GURU
   if (userRole !== 'guru') {
     if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
     if (kotaKab !== undefined) payloadToUpdate.kotaKab = kotaKab

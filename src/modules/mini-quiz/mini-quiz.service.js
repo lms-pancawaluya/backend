@@ -25,8 +25,6 @@ const getMiniQuizByContent = async (contentId, role) => {
             select: {
               id: true,
               teksOpsi: true,
-              // Kunci: isCorrect hanya bernilai true/false untuk Admin, 
-              // untuk Guru/User field ini otomatis disembunyikan
               isCorrect: isAdmin
             }
           }
@@ -168,7 +166,6 @@ const updateQuestion = async (questionId, data) => {
     throw new Error('Soal tidak ditemukan')
   }
 
-  // Jika menyertakan opsi jawaban baru, lakukan validasi ketat
   if (options !== undefined) {
     if (!Array.isArray(options) || options.length < 2) {
       throw new Error('Soal harus memiliki minimal 2 pilihan jawaban')
@@ -180,7 +177,6 @@ const updateQuestion = async (questionId, data) => {
   }
 
   const updatedQuestion = await prisma.$transaction(async (tx) => {
-    // 1. Update teks pertanyaan
     await tx.miniQuizQuestion.update({
       where: { id: questionId },
       data: {
@@ -188,7 +184,6 @@ const updateQuestion = async (questionId, data) => {
       }
     })
 
-    // 2. Jika options dikirim, hapus yang lama & ganti yang baru
     if (options && Array.isArray(options)) {
       await tx.miniQuizOption.deleteMany({
         where: { questionId }
@@ -203,7 +198,6 @@ const updateQuestion = async (questionId, data) => {
       })
     }
 
-    // 3. Return data terbaru
     return await tx.miniQuizQuestion.findUnique({
       where: { id: questionId },
       include: { options: true }
@@ -265,7 +259,7 @@ const getMyAttempts = async (userId, miniQuizId) => {
 }
 
 // ================================================
-// SUBMIT ATTEMPT — Guru kerjakan mini kuis (FIXED)
+// SUBMIT ATTEMPT — Guru kerjakan mini kuis (FULLY FIXED)
 // ================================================
 const submitAttempt = async (userId, miniQuizId, data) => {
   const { jawaban } = data
@@ -294,7 +288,17 @@ const submitAttempt = async (userId, miniQuizId, data) => {
 
   const sudahLulus = attempts.some(a => a.isLolos)
   if (sudahLulus) {
-    throw new Error('Kamu sudah lulus mini kuis ini!')
+    return {
+      attemptNumber: attempts.length,
+      skor: 100,
+      isLolos: true,
+      benar: miniQuiz.questions.length,
+      totalSoal: miniQuiz.questions.length,
+      passingScore: miniQuiz.passingScore,
+      sisaPercobaan: 0,
+      mustRepeat: false,
+      pesan: 'Kamu sudah lulus mini kuis ini sebelumnya. Silakan lanjut ke materi berikutnya!'
+    }
   }
 
   let benar = 0
@@ -327,6 +331,68 @@ const submitAttempt = async (userId, miniQuizId, data) => {
       isLolos: isLolos
     }
   })
+
+  // ================================================
+  // OTOMATISASI PROGRESS MODUL (AUTO-COMPLETE CHECK)
+  // ================================================
+  const content = await prisma.content.findUnique({
+    where: { id: miniQuiz.contentId },
+    select: { moduleId: true }
+  })
+
+  if (content && content.moduleId) {
+    const moduleId = content.moduleId
+
+    // 1. Ambil semua konten beserta mini kuis di modul ini
+    const allContentsInModule = await prisma.content.findMany({
+      where: { moduleId },
+      include: {
+        miniQuizzes: {
+          include: {
+            attempts: {
+              where: { userId, isLolos: true }
+            }
+          }
+        }
+      }
+    })
+
+    // 2. Hitung jumlah total kuis vs kuis yang sudah lulus
+    let totalKuisModul = 0
+    let kuisLulusModul = 0
+
+    allContentsInModule.forEach(c => {
+      c.miniQuizzes.forEach(q => {
+        totalKuisModul++
+        if (q.attempts.length > 0) {
+          kuisLulusModul++
+        }
+      })
+    })
+
+    // 3. Tentukan status modul (selesai jika seluruh kuis lulus)
+    const isModulSelesai = totalKuisModul > 0 && totalKuisModul === kuisLulusModul
+
+    if (isModulSelesai) {
+      await prisma.user_progress.upsert({
+        where: { userId_moduleId: { userId, moduleId } },
+        update: { status: 'selesai', completedAt: new Date() },
+        create: { userId, moduleId, status: 'selesai', completedAt: new Date() }
+      })
+    } else {
+      const existingProgress = await prisma.user_progress.findUnique({
+        where: { userId_moduleId: { userId, moduleId } }
+      })
+
+      if (!existingProgress || existingProgress.status !== 'selesai') {
+        await prisma.user_progress.upsert({
+          where: { userId_moduleId: { userId, moduleId } },
+          update: { status: 'sedang_belajar' },
+          create: { userId, moduleId, status: 'sedang_belajar' }
+        })
+      }
+    }
+  }
 
   const maxAttempts = miniQuiz.maxAttempts
   const sisaPercobaan = maxAttempts - attemptNumber

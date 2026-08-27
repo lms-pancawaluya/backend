@@ -33,10 +33,10 @@ const getProgress = async (userId) => {
 }
 
 // ================================================
-// GET SUMMARY — Ringkasan progress semua modul
+// GET SUMMARY — Ringkasan progress semua modul (FIXED)
 // ================================================
 const getSummary = async (userId) => {
-  // Ambil semua modul yang ada
+  // 1. Ambil semua modul yang ada
   const allModules = await prisma.module.findMany({
     select: {
       id: true,
@@ -47,7 +47,7 @@ const getSummary = async (userId) => {
     orderBy: { urutan: 'asc' }
   })
 
-  // Ambil progress guru untuk semua modul
+  // 2. Ambil progress guru untuk semua modul
   const userProgress = await prisma.user_progress.findMany({
     where: { userId },
     select: {
@@ -57,7 +57,7 @@ const getSummary = async (userId) => {
     }
   })
 
-  // Gabungkan data modul dengan progress guru
+  // 3. Gabungkan data modul dengan progress guru
   const summary = allModules.map(module => {
     const progress = userProgress.find(p => p.moduleId === module.id)
 
@@ -68,7 +68,7 @@ const getSummary = async (userId) => {
     }
   })
 
-  // Hitung statistik
+  // 4. Hitung statistik persentase keseluruhan
   const totalModul = allModules.length
   const selesai = userProgress.filter(p => p.status === 'selesai').length
   const sedangBelajar = userProgress.filter(p => p.status === 'sedang_belajar').length
@@ -89,7 +89,7 @@ const getSummary = async (userId) => {
 }
 
 // ================================================
-// START MODULE — Mulai belajar modul
+// START MODULE — Mulai belajar modul (FIXED LOGIC)
 // ================================================
 const startModule = async (userId, moduleId) => {
   // Cek apakah modul ada
@@ -101,13 +101,24 @@ const startModule = async (userId, moduleId) => {
     throw new Error('Modul tidak ditemukan')
   }
 
-  // Pakai upsert — kalau sudah ada progress, tidak buat baru
+  // Cek status progress yang ada saat ini
+  const existingProgress = await prisma.user_progress.findUnique({
+    where: {
+      userId_moduleId: { userId, moduleId }
+    }
+  })
+
+  // Jika sudah 'selesai', JANGAN diubah kembali ke 'sedang_belajar'
+  if (existingProgress && existingProgress.status === 'selesai') {
+    return existingProgress
+  }
+
+  // Jika belum ada atau statusnya belum_mulai, set ke sedang_belajar
   const progress = await prisma.user_progress.upsert({
     where: {
       userId_moduleId: { userId, moduleId }
     },
     update: {
-      // Kalau sudah selesai, jangan reset ke sedang_belajar
       status: 'sedang_belajar'
     },
     create: {
@@ -121,29 +132,30 @@ const startModule = async (userId, moduleId) => {
 }
 
 // ================================================
-// COMPLETE MODULE — Tandai modul selesai
+// COMPLETE MODULE — Tandai modul selesai (FIXED LOGIC)
 // ================================================
 const completeModule = async (userId, moduleId) => {
-  // Cek apakah progress ada
-  const progressAda = await prisma.user_progress.findUnique({
-    where: {
-      userId_moduleId: { userId, moduleId }
-    }
+  // Cek modul
+  const moduleAda = await prisma.module.findUnique({
+    where: { id: moduleId }
   })
 
-  if (!progressAda) {
-    throw new Error('Kamu belum memulai modul ini. Mulai dulu sebelum menyelesaikan.')
+  if (!moduleAda) {
+    throw new Error('Modul tidak ditemukan')
   }
 
-  if (progressAda.status === 'selesai') {
-    throw new Error('Modul ini sudah selesai sebelumnya')
-  }
-
-  const progress = await prisma.user_progress.update({
+  // Set atau update status menjadi selesai
+  const progress = await prisma.user_progress.upsert({
     where: {
       userId_moduleId: { userId, moduleId }
     },
-    data: {
+    update: {
+      status: 'selesai',
+      completedAt: new Date()
+    },
+    create: {
+      userId,
+      moduleId,
       status: 'selesai',
       completedAt: new Date()
     }
@@ -174,7 +186,6 @@ const getProgressByModule = async (userId, moduleId) => {
     }
   })
 
-  // Kalau belum ada progress, return status belum_mulai
   if (!progress) {
     return {
       status: 'belum_mulai',

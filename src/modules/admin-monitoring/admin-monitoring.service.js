@@ -114,7 +114,7 @@ const getUserEvaluations = async (userId) => {
   }
 }
 
-// Ambil progress SEMUA guru sekaligus dalam 2 query
+// 3. Ambil progress SEMUA guru sekaligus
 const getAllUsersModuleProgress = async () => {
   // Query 1: Ambil semua modul terurut
   const allModules = await prisma.module.findMany({
@@ -122,14 +122,15 @@ const getAllUsersModuleProgress = async () => {
     select: { id: true, judul: true, urutan: true }
   })
 
-  // Query 2: Ambil semua user role 'guru' beserta user_progress-nya
+  // Query 2: Ambil semua user role 'guru' beserta progress-nya
+  // SESUAI SCHEMA PRISMA: nama relasi di Model User adalah "progress"
   const users = await prisma.user.findMany({
     where: { role: 'guru' },
     select: {
       id: true,
       nama: true,
       email: true,
-      user_progress: {
+      progress: {
         select: {
           moduleId: true,
           status: true,
@@ -142,8 +143,7 @@ const getAllUsersModuleProgress = async () => {
 
   // Mapping data di memori Node.js
   return users.map(user => {
-    // FIX: Gunakan user.user_progress (bukan user.progress)
-    const userProgressList = user.user_progress || []
+    const userProgressList = user.progress || []
     const progressMap = new Map(userProgressList.map(p => [p.moduleId, p]))
     let modulSelesaiCount = 0
 

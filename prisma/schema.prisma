@@ -390,3 +390,35 @@ model TicketReply {
 
   @@map("ticket_replies")
 }
+
+// ==========================================
+// MASTER DATA (DATASET SEKOLAH & GURU)
+// ==========================================
+
+model MasterSekolah {
+  id            String   @id @default(uuid())
+  npsn          String?  @unique @map("npsn")
+  nama          String   @map("nama_sekolah")
+  bentuk        String?  @default("SMA")
+  kotaKab       String   @map("kota_kab")
+  kecamatan     String?  @map("kecamatan")
+  desaKelurahan String?  @map("desa_kelurahan")
+  status        String?  @map("status")
+  akreditasi    String?  @map("akreditasi")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("master_sekolah")
+}
+
+model MasterGuru {
+  id          String   @id @default(uuid())
+  nip         String   @unique @map("nip")
+  namaGuru    String   @map("nama_guru")
+  npsnSekolah String   @map("npsn_sekolah")
+  namaSekolah String   @map("nama_sekolah")
+  kotaKab     String   @map("kota_kab")
+  kecamatan   String?  @map("kecamatan")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("master_guru")
+}

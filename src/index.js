@@ -14,11 +14,11 @@ const feedbackRoute = require('./modules/feedback/feedback.route')
 const adminMonitoringRoute = require('./modules/admin-monitoring/admin-monitoring.route')
 const helpdeskRoutes = require('./modules/helpdesk/helpdesk.routes')
 const commentRoutes = require('./modules/comments/comments.routes')
+const guruRoute = require('./modules/guru/guru.route')
 
 const PORT = process.env.PORT || 3000
 
 // ===== DAFTARKAN SEMUA ROUTE =====
-// Semua route auth akan diawali dengan /api/auth
 app.use('/api/auth', authRoute)
 app.use('/api/users', usersRoute)
 app.use('/api/modules', modulesRoute)
@@ -32,6 +32,7 @@ app.use('/api/feedbacks', feedbackRoute)
 app.use('/api/admin', adminMonitoringRoute)
 app.use('/api/helpdesk', helpdeskRoutes)
 app.use('/api/comments', commentRoutes)
+app.use('/api/guru', guruRoute)
 
 
 

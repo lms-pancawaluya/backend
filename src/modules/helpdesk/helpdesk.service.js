@@ -54,7 +54,13 @@ const getAllTickets = async (filters) => {
     where: whereClause,
     include: {
       user: {
-        select: { id: true, nama: true, email: true, sekolah: true }
+        select: { 
+          id: true, 
+          nama: true, 
+          email: true, 
+          sekolah: true,
+          role: true // <-- TAMBAHAN UNTUK FE ADMIN (HIGHLIGHT TIKET PENGAJAR)
+        }
       }
     },
     orderBy: { updatedAt: 'desc' }
@@ -69,7 +75,13 @@ const getTicketById = async (ticketId, userId, userRole) => {
     where: { id: ticketId },
     include: {
       user: {
-        select: { id: true, nama: true, email: true, sekolah: true }
+        select: { 
+          id: true, 
+          nama: true, 
+          email: true, 
+          sekolah: true,
+          role: true // <-- TAMBAHAN UNTUK FE ADMIN (HIGHLIGHT TIKET PENGAJAR)
+        }
       },
       replies: {
         include: {

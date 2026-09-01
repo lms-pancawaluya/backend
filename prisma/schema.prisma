@@ -55,28 +55,35 @@ enum RtlStatus {
   ditolak
 }
 
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
 // ==========================================
 // TABEL DATABASE (MODELS)
 // ==========================================
 
 model User {
-  id           String     @id @default(uuid())
+  id           String    @id @default(uuid())
   nama         String
-  email        String     @unique
+  email        String    @unique
   password     String
-  role         Role       @default(guru)
+  role         Role      @default(guru)
   status       UserStatus @default(aktif) @map("status")
-  nip          String?    @unique @map("nip")        
-  sekolah      String?    @map("sekolah")        
-  kotaKab      String?    @map("kota/kab")    // SESUAI SUPABASE
-  kecamatan    String?    @map("kecamatan")
-  noHp         String?    @map("no_hp")         
-  fotoProfil   String?    @map("foto_profil") 
-  isVerified   Boolean    @default(false) @map("is_verified")
-  otpCode      String?    @map("otp_code") 
-  otpExpiresAt DateTime?  @map("otp_expires_at")
-  gelar        String?    @map("gelar")
-  createdAt    DateTime   @default(now()) @map("created_at")
+  nip          String?   @unique @map("nip")        
+  sekolah      String?   @map("sekolah")        
+  kotaKab      String?   @map("kota/kab")    // SESUAI SUPABASE
+  kecamatan    String?   @map("kecamatan")
+  noHp         String?   @map("no_hp")         
+  fotoProfil   String?   @map("foto_profil") 
+  isVerified   Boolean   @default(false) @map("is_verified")
+  otpCode      String?   @map("otp_code") 
+  otpExpiresAt DateTime? @map("otp_expires_at")
+  gelar        String?   @map("gelar")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
   // Relasi
   progress         user_progress[]
@@ -90,6 +97,7 @@ model User {
 
   tickets       Ticket[]        @relation("UserTickets")
   ticketReplies TicketReply[]   @relation("UserTicketReplies")
+  notifications Notification[]  // TAMBAHAN REVISI: Relasi Notifikasi
   @@map("users")
 }
 
@@ -151,7 +159,7 @@ model Question {
   createdAt    DateTime     @default(now()) @map("created_at")
 
   // Relasi
-  evaluation Evaluation     @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  evaluation Evaluation   @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
   options    Option[]
   answers    user_answers[]
 
@@ -188,12 +196,12 @@ model user_progress {
 }
 
 model user_answers {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  questionId String  @map("question_id")
-  jawaban   String   @db.Text
-  isCorrect Boolean? @map("is_correct")
-  createdAt DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  questionId String   @map("question_id")
+  jawaban    String   @db.Text
+  isCorrect  Boolean? @map("is_correct")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   // Relasi
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -223,7 +231,7 @@ model Feedback {
 }
 
 // ==========================================
-// FITUR KOMENTAR (POIN 4)
+// FITUR KOMENTAR
 // ==========================================
 
 model Comment {
@@ -241,20 +249,20 @@ model Comment {
 }
 
 // ==========================================
-// FITUR UPLOAD RTL & SERTIFIKAT (POIN 3 & 7)
+// FITUR UPLOAD RTL & SERTIFIKAT
 // ==========================================
 
 model RtlSubmission {
-  id            String    @id @default(uuid())
-  userId        String    @map("user_id")
-  moduleId      String    @map("module_id")
-  filePdfUrl    String    @map("file_pdf_url") @db.Text
-  catatanGuru   String?   @map("catatan_guru") @db.Text
-  status        RtlStatus @default(pending)
-  catatanTrainer String?  @map("catatan_trainer") @db.Text
-  reviewedById  String?   @map("reviewed_by_id")
-  reviewedAt    DateTime? @map("reviewed_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  moduleId       String    @map("module_id")
+  filePdfUrl     String    @map("file_pdf_url") @db.Text
+  catatanGuru    String?   @map("catatan_guru") @db.Text
+  status         RtlStatus @default(pending)
+  catatanTrainer String?   @map("catatan_trainer") @db.Text
+  reviewedById   String?   @map("reviewed_by_id")
+  reviewedAt     DateTime? @map("reviewed_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   // Relasi
   user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -266,7 +274,7 @@ model RtlSubmission {
 }
 
 // ==========================================
-// FITUR JADWAL VIRTUAL MEETING (POIN 5 & 6)
+// FITUR JADWAL VIRTUAL MEETING
 // ==========================================
 
 model Meeting {
@@ -299,9 +307,9 @@ model MiniQuiz {
   createdAt        DateTime @default(now()) @map("created_at")
 
   // Relasi
-  content   Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content  Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
   questions MiniQuizQuestion[]
-  attempts  MiniQuizAttempt[]
+  attempts MiniQuizAttempt[]
 
   @@map("mini_quizzes")
 }
@@ -352,13 +360,6 @@ model MiniQuizAttempt {
 // FITUR HELPDESK / TICKETING
 // ==========================================
 
-enum TicketStatus {
-  open
-  in_progress
-  resolved
-  closed
-}
-
 model Ticket {
   id           String       @id @default(uuid())
   ticketNumber String       @unique @map("ticket_number")
@@ -389,6 +390,26 @@ model TicketReply {
   sender User   @relation("UserTicketReplies", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@map("ticket_replies")
+}
+
+// ==========================================
+// FITUR NOTIFIKASI
+// ==========================================
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String   @db.Text
+  type      String   // Contoh: 'MODULE_NEW', 'HELPDESK_REPLY', 'PROGRESS_COMPLETE'
+  isRead    Boolean  @default(false) @map("is_read")
+  linkUrl   String?  @map("link_url") // Routing FE saat notif diklik
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
 }
 
 // ==========================================

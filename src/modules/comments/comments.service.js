@@ -1,8 +1,11 @@
-const prisma = require('../../config/database')
+// src/modules/comments/comments.service.js
 
-// 1. Tambah Komentar Baru
+const prisma = require('../../config/database')
+const notificationService = require('../notifications/notifications.service') // Import notificationService
+
+// 1. Tambah Komentar Baru (Bisa Root Comment / Reply Comment)
 const createComment = async (userId, data) => {
-  const { moduleId, komentar } = data
+  const { moduleId, komentar, parentId } = data // Tangkap parentId jika ada balasan
 
   if (!moduleId || !komentar) {
     throw new Error('Module ID dan isi komentar wajib diisi')
@@ -21,7 +24,8 @@ const createComment = async (userId, data) => {
     data: {
       userId,
       moduleId,
-      komentar
+      komentar,
+      ...(parentId && { parentId }) // Simpan parentId jika membalas komentar
     },
     include: {
       user: {
@@ -35,6 +39,54 @@ const createComment = async (userId, data) => {
       }
     }
   })
+
+  // ================================================
+  // AUTO NOTIFIKASI
+  // ================================================
+  try {
+    // SCENARIO 1: MEMBALAS KOMENTAR (Reply Comment)
+    if (parentId) {
+      const parentComment = await prisma.comment.findUnique({
+        where: { id: parentId },
+        select: { userId: true }
+      })
+
+      // Kirim notifikasi HANYA jika yang membalas BUKAN pembuat komentar itu sendiri
+      if (parentComment && parentComment.userId !== userId) {
+        await notificationService.createNotification({
+          userId: parentComment.userId, // Pemilik komentar utama (Guru/Pengajar/Admin)
+          title: 'Balasan Komentar',
+          message: `${newComment.user.nama} membalas komentar kamu di Modul "${moduleExist.judul}".`,
+          type: 'COMMENT_REPLY',
+          linkUrl: `/modules/${moduleId}?commentId=${newComment.id}`
+        })
+      }
+    } 
+    // SCENARIO 2: KOMENTAR UTAMA BARU (Root Comment)
+    else {
+      const pengajarList = await prisma.user.findMany({
+        where: {
+          role: 'pengajar',
+          NOT: { id: userId } // Jangan kirim ke diri sendiri jika pengajar yang menulis komentar
+        },
+        select: { id: true }
+      })
+
+      if (pengajarList.length > 0) {
+        const notificationsData = pengajarList.map((pengajar) => ({
+          userId: pengajar.id,
+          title: 'Komentar Baru di Modul',
+          message: `${newComment.user.nama} menambahkan komentar baru di Modul ${moduleExist.judul}.`,
+          type: 'NEW_COMMENT',
+          linkUrl: `/modules/${moduleId}?commentId=${newComment.id}`
+        }))
+
+        await notificationService.createManyNotifications(notificationsData)
+      }
+    }
+  } catch (error) {
+    console.error('Gagal mengirimkan notifikasi komentar:', error.message)
+  }
 
   return newComment
 }

@@ -1,6 +1,7 @@
 // src/modules/helpdesk/helpdesk.service.js
 
 const prisma = require('../../config/database')
+const notificationService = require('../notifications/notifications.service') // <-- Import notificationService
 
 // Generate nomor tiket otomatis yang lebih unik (contoh: TKT-20260826-A8K2)
 const generateTicketNumber = () => {
@@ -27,8 +28,44 @@ const createTicket = async (userId, data) => {
       category,
       description,
       status: 'open'
+    },
+    include: {
+      user: {
+        select: { nama: true }
+      }
     }
   })
+
+  // ================================================
+  // AUTO NOTIFIKASI: Kirim ke Admin & Pengajar
+  // ================================================
+  try {
+    const adminAndMentors = await prisma.user.findMany({
+      where: {
+        role: { in: ['admin', 'pengajar'] }
+      },
+      select: { id: true, role: true }
+    })
+
+    if (adminAndMentors.length > 0) {
+      const notificationsData = adminAndMentors.map((staff) => {
+        const isPengajar = staff.role === 'pengajar'
+        return {
+          userId: staff.id,
+          title: isPengajar ? 'Tiket Helpdesk Baru (Prioritas)' : 'Tiket Helpdesk Masuk',
+          message: isPengajar
+            ? `Tiket baru #${ticket.ticketNumber} dari ${ticket.user.nama} membutuhkan bantuan.`
+            : `Tiket bantuan baru #${ticket.ticketNumber} dibuat oleh ${ticket.user.nama}.`,
+          type: 'NEW_HELPDESK_TICKET',
+          linkUrl: `/helpdesk/tickets/${ticket.id}`
+        }
+      })
+
+      await notificationService.createManyNotifications(notificationsData)
+    }
+  } catch (error) {
+    console.error('Gagal mengirim notifikasi tiket baru:', error.message)
+  }
 
   return ticket
 }
@@ -59,7 +96,7 @@ const getAllTickets = async (filters) => {
           nama: true, 
           email: true, 
           sekolah: true,
-          role: true // <-- TAMBAHAN UNTUK FE ADMIN (HIGHLIGHT TIKET PENGAJAR)
+          role: true
         }
       }
     },
@@ -80,7 +117,7 @@ const getTicketById = async (ticketId, userId, userRole) => {
           nama: true, 
           email: true, 
           sekolah: true,
-          role: true // <-- TAMBAHAN UNTUK FE ADMIN (HIGHLIGHT TIKET PENGAJAR)
+          role: true
         }
       },
       replies: {
@@ -122,7 +159,7 @@ const replyTicket = async (ticketId, senderId, userRole, data) => {
     throw new Error('Tiket tidak ditemukan')
   }
 
-  // VALIDASI BARU: Tiket yang sudah closed tidak bisa dibalas
+  // VALIDASI: Tiket yang sudah closed tidak bisa dibalas
   if (ticket.status === 'closed') {
     throw new Error('Tiket sudah ditutup dan tidak dapat dibalas lagi')
   }
@@ -157,6 +194,42 @@ const replyTicket = async (ticketId, senderId, userRole, data) => {
       where: { id: ticketId },
       data: { updatedAt: new Date() }
     })
+  }
+
+  // ================================================
+  // AUTO NOTIFIKASI: Kirim Balasan Tiket
+  // ================================================
+  try {
+    if (['admin', 'pengajar'].includes(userRole)) {
+      // Jika Admin/Pengajar membalas, kirim notifikasi ke GURU pemilik tiket
+      await notificationService.createNotification({
+        userId: ticket.userId,
+        title: 'Balasan Helpdesk',
+        message: `Tiket #${ticket.ticketNumber} kamu telah dibalas oleh ${reply.sender.nama}.`,
+        type: 'HELPDESK_REPLY',
+        linkUrl: `/helpdesk/tickets/${ticket.id}`
+      })
+    } else {
+      // Jika Guru membalas, kirim notifikasi ke seluruh Admin & Pengajar
+      const staffList = await prisma.user.findMany({
+        where: { role: { in: ['admin', 'pengajar'] } },
+        select: { id: true }
+      })
+
+      if (staffList.length > 0) {
+        const notifData = staffList.map((staff) => ({
+          userId: staff.id,
+          title: 'Balasan Tiket Bantuan',
+          message: `${reply.sender.nama} membalas tiket #${ticket.ticketNumber}`,
+          type: 'HELPDESK_REPLY',
+          linkUrl: `/helpdesk/tickets/${ticket.id}`
+        }))
+
+        await notificationService.createManyNotifications(notifData)
+      }
+    }
+  } catch (error) {
+    console.error('Gagal mengirim notifikasi balasan tiket:', error.message)
   }
 
   return reply

@@ -1,6 +1,7 @@
 // src/modules/modules/modules.service.js
 
 const prisma = require('../../config/database')
+const notificationService = require('../notifications/notifications.service') // <-- Import notificationService
 
 // ================================================
 // GET ALL MODULES — Ambil semua modul
@@ -105,6 +106,30 @@ const createModule = async (data) => {
       urutan
     }
   })
+
+  // ================================================
+  // AUTO NOTIFIKASI: Broadcast Modul Baru ke Seluruh Guru
+  // ================================================
+  try {
+    const teachers = await prisma.user.findMany({
+      where: { role: 'guru' },
+      select: { id: true }
+    })
+
+    if (teachers.length > 0) {
+      const notificationsData = teachers.map((teacher) => ({
+        userId: teacher.id,
+        title: 'Modul Baru',
+        message: `Modul baru "${moduleBaru.judul}" telah tersedia. Yuk pelajari sekarang!`,
+        type: 'NEW_MODULE',
+        linkUrl: `/modules/${moduleBaru.id}`
+      }))
+
+      await notificationService.createManyNotifications(notificationsData)
+    }
+  } catch (error) {
+    console.error('Gagal mengirimkan notifikasi modul baru:', error.message)
+  }
 
   return moduleBaru
 }

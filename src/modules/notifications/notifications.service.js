@@ -1,4 +1,8 @@
-const prisma = require('../../config/database') 
+// src/modules/notifications/notifications.service.js
+
+const crypto = require('crypto') 
+const prisma = require('../../config/database')
+
 /**
  * Ambil daftar notifikasi milik user yang sedang login
  */
@@ -51,9 +55,9 @@ const markAsRead = async (notificationId, userId) => {
  */
 const markAllAsRead = async (userId) => {
   await prisma.notification.updateMany({
-    where: { 
+    where: {
       userId,
-      isRead: false 
+      isRead: false
     },
     data: { isRead: true }
   })
@@ -62,16 +66,6 @@ const markAllAsRead = async (userId) => {
 
 /**
  * HELPER INTERNAL: Membuat Notifikasi Baru
- * Dipakai oleh modul lain (Helpdesk, Content, RTL, dll)
- *
- * Contoh pemanggilan dari modul helpdesk:
- * await notificationService.createNotification({
- *   userId: ticket.userId,
- *   title: 'Balasan Tiket Bantuan',
- *   message: 'Admin membalas tiket kamu',
- *   type: 'HELPDESK_REPLY',
- *   linkUrl: `/helpdesk/tickets/${ticketId}`
- * })
  */
 const createNotification = async ({ userId, title, message, type, linkUrl = null }) => {
   return await prisma.notification.create({
@@ -87,11 +81,16 @@ const createNotification = async ({ userId, title, message, type, linkUrl = null
 
 /**
  * HELPER INTERNAL: Kirim Notifikasi Masal (Broadcasting)
- * Cocok untuk pengumuman modul baru ke banyak user sekaligus
+ * REVISI: Generasi UUID manual per item agar PostgreSQL tidak throw error NULL ID
  */
 const createManyNotifications = async (notificationsArray) => {
+  const formattedData = notificationsArray.map((notif) => ({
+    id: crypto.randomUUID(), // Inject UUID manual untuk tiap item
+    ...notif
+  }))
+
   return await prisma.notification.createMany({
-    data: notificationsArray
+    data: formattedData
   })
 }
 

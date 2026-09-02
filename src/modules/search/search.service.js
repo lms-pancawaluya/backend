@@ -63,7 +63,7 @@ const globalSearch = async (query, user) => {
           { ticketNumber: { contains: cleanQuery, mode: 'insensitive' } },
           { subject: { contains: cleanQuery, mode: 'insensitive' } }
         ],
-        ...(user.role === 'guru' ? { userId: user.id } : {})
+        ...(user?.role === 'guru' ? { userId: user.id } : {})
       },
       select: {
         id: true,

@@ -1,9 +1,9 @@
 const express = require('express')
 const router = express.Router()
 const searchController = require('./search.controller')
-const { verifyToken } = require('../../middlewares/auth.middleware') // Sesuaikan path middleware auth kamu
+const authMiddleware = require('../../middlewares/auth.middleware') 
 
 // Endpoint Search Global: GET /api/search?q=keyword
-router.get('/', verifyToken, searchController.handleGlobalSearch)
+router.get('/', authMiddleware, searchController.handleGlobalSearch)
 
 module.exports = router

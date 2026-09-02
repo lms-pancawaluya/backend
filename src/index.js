@@ -16,6 +16,7 @@ const helpdeskRoutes = require('./modules/helpdesk/helpdesk.routes')
 const commentRoutes = require('./modules/comments/comments.routes')
 const guruRoute = require('./modules/guru/guru.route')
 const notificationRoute = require('./modules/notifications/notifications.route')
+const searchRouter = require('./modules/search/search.route')
 
 const PORT = process.env.PORT || 3000
 
@@ -35,6 +36,7 @@ app.use('/api/helpdesk', helpdeskRoutes)
 app.use('/api/comments', commentRoutes)
 app.use('/api/guru', guruRoute)
 app.use('/api/notifications', notificationRoute)
+app.use('/api/search', searchRouter)
 
 
 

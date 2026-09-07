@@ -9,14 +9,41 @@ const app = express()
 
 // ===== MIDDLEWARE =====
 
-// 1. Helmet — keamanan dasar
-app.use(helmet())
+// 1. Helmet — keamanan dasar (nonaktifkan crossOriginResourcePolicy agar tidak memblokir media/ngrok)
+app.use(helmet({
+  crossOriginResourcePolicy: false
+}))
 
 // 2. CORS — izinkan frontend akses API ini
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://10.10.20.212:3001',
-  credentials: true
-}))
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://10.10.20.212:3001',
+  process.env.FRONTEND_URL
+].filter(Boolean)
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Izinkan request tanpa origin (Postman/Thunder Client) atau jika origin terdaftar
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(null, true)
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'ngrok-skip-browser-warning' // <--- DIIZINKAN UNTUK NGROK
+  ]
+}
+
+// Pasang middleware CORS (Otomatis menangani preflight OPTIONS tanpa perlu app.options('*'))
+app.use(cors(corsOptions))
 
 // 3. JSON Parser — agar server bisa baca data JSON dari request
 app.use(express.json())

@@ -19,13 +19,15 @@ const getEvaluationsByModule = async (moduleId) => {
     select: {
       id: true,
       judul: true,
+      tipe: true, // pre_test, post_test, atau module_eval
       passingScore: true,
       maxAttempts: true,
       createdAt: true,
       _count: {
         select: { questions: true }
       }
-    }
+    },
+    orderBy: { createdAt: 'asc' }
   })
 
   return evaluations
@@ -40,6 +42,7 @@ const getEvaluationById = async (id) => {
     select: {
       id: true,
       judul: true,
+      tipe: true,
       moduleId: true,
       passingScore: true,
       maxAttempts: true,
@@ -49,7 +52,7 @@ const getEvaluationById = async (id) => {
           id: true,
           pertanyaan: true,
           tipe: true,
-          // Sembunyikan isCorrect agar tidak bocor ke user/guru
+          // Sembunyikan isCorrect agar kunci jawaban tidak bocor ke frontend
           options: {
             select: {
               id: true,
@@ -69,10 +72,10 @@ const getEvaluationById = async (id) => {
 }
 
 // ================================================
-// CREATE EVALUATION
+// CREATE EVALUATION (Dukungan Pre-Test & Post-Test)
 // ================================================
 const createEvaluation = async (moduleId, data) => {
-  const { judul, passingScore, maxAttempts } = data
+  const { judul, tipe, passingScore, maxAttempts } = data
 
   const moduleAda = await prisma.module.findUnique({
     where: { id: moduleId }
@@ -82,12 +85,16 @@ const createEvaluation = async (moduleId, data) => {
     throw new Error('Modul tidak ditemukan')
   }
 
+  const isPreTest = tipe === 'pre_test'
+
   const evaluationBaru = await prisma.evaluation.create({
     data: { 
       moduleId, 
       judul,
-      passingScore: passingScore || 80,
-      maxAttempts: maxAttempts || 3
+      tipe: tipe || 'post_test',
+      // Pre-Test tidak perlu passing score & default 1x attempt
+      passingScore: isPreTest ? 0 : (passingScore || 80),
+      maxAttempts: isPreTest ? 1 : (maxAttempts || 3)
     }
   })
 
@@ -138,11 +145,10 @@ const createQuestion = async (evaluationId, data) => {
 }
 
 // ================================================
-// SUBMIT JAWABAN — Auto-Grading & Rules Scoring
+// SUBMIT JAWABAN — Auto-Grading (Pre-Test vs Post-Test)
 // ================================================
 const submitJawaban = async (evaluationId, userId, data) => {
   const { jawaban } = data
-  // jawaban = array: [{ questionId, jawaban }] (jawaban berisi optionId)
 
   const evaluationAda = await prisma.evaluation.findUnique({
     where: { id: evaluationId },
@@ -164,7 +170,7 @@ const submitJawaban = async (evaluationId, userId, data) => {
 
   let totalBenar = 0
 
-  // 1. Simpan/Update Jawaban User & Hitung Skor Pilihan Ganda
+  // 1. Simpan/Update Jawaban User
   await Promise.all(
     jawaban.map(async (item) => {
       const question = evaluationAda.questions.find(
@@ -175,7 +181,6 @@ const submitJawaban = async (evaluationId, userId, data) => {
         throw new Error(`Soal dengan id ${item.questionId} tidak ditemukan`)
       }
 
-      // Cek apakah Option ID yang dipilih bernilai true (isCorrect)
       const pilihanBenar = question.options.find(
         opt => opt.id === item.jawaban && opt.isCorrect
       )
@@ -206,11 +211,12 @@ const submitJawaban = async (evaluationId, userId, data) => {
 
   // 2. Kalkulasi Nilai
   const skor = Math.round((totalBenar / totalSoal) * 100)
-  const passingScore = evaluationAda.passingScore || 80
-  const maxAttempts = evaluationAda.maxAttempts || 3
+  const isPreTest = evaluationAda.tipe === 'pre_test'
+  const passingScore = isPreTest ? 0 : (evaluationAda.passingScore || 80)
+  const maxAttempts = isPreTest ? 1 : (evaluationAda.maxAttempts || 3)
   const isLolos = skor >= passingScore
 
-  // 3. Ambil / Update Status Progress User di Modul Ini
+  // 3. Status Progress User di Modul Ini
   let progress = await prisma.user_progress.findUnique({
     where: {
       userId_moduleId: {
@@ -222,39 +228,62 @@ const submitJawaban = async (evaluationId, userId, data) => {
 
   let currentAttempts = (progress?.attempts || 0) + 1
   let mustRepeat = false
-  let statusProgress = isLolos ? 'selesai' : 'sedang_belajar'
+  let statusProgress = progress?.status || 'belum_mulai'
 
-  // Logika jika gagal & sudah melebihi/mencapai batas percobaan (3x)
-  if (!isLolos && currentAttempts >= maxAttempts) {
-    mustRepeat = true
-    statusProgress = 'belum_mulai' // Reset progress modul ke 'belum_mulai' agar baca ulang
-  }
-
-  if (progress) {
-    await prisma.user_progress.update({
-      where: { id: progress.id },
-      data: {
-        skor,
-        status: statusProgress,
-        attempts: mustRepeat ? 0 : currentAttempts,
-        completedAt: isLolos ? new Date() : null
-      }
-    })
+  // Logika pembeda Pre-Test & Post-Test
+  if (isPreTest) {
+    // Pre-test langsung mengubah status modul agar user bisa belajar
+    statusProgress = 'sedang_belajar'
   } else {
-    await prisma.user_progress.create({
-      data: {
-        userId,
-        moduleId: evaluationAda.moduleId,
-        skor,
-        status: statusProgress,
-        attempts: mustRepeat ? 0 : currentAttempts,
-        completedAt: isLolos ? new Date() : null
+    // Post-test
+    if (isLolos) {
+      statusProgress = 'selesai'
+    } else {
+      statusProgress = 'sedang_belajar'
+      if (currentAttempts >= maxAttempts) {
+        mustRepeat = true
+        statusProgress = 'belum_mulai' // Reset jika gagal 3x post-test
       }
-    })
+    }
   }
 
-  // 4. Return Output Detail ke Frontend
+  await prisma.user_progress.upsert({
+    where: {
+      userId_moduleId: {
+        userId,
+        moduleId: evaluationAda.moduleId
+      }
+    },
+    update: {
+      ...(!isPreTest && { skor }), // Hanya update skor utama jika post-test
+      status: statusProgress,
+      attempts: mustRepeat ? 0 : currentAttempts,
+      completedAt: isLolos && !isPreTest ? new Date() : null
+    },
+    create: {
+      userId,
+      moduleId: evaluationAda.moduleId,
+      skor: isPreTest ? 0 : skor,
+      status: statusProgress,
+      attempts: mustRepeat ? 0 : currentAttempts,
+      completedAt: isLolos && !isPreTest ? new Date() : null
+    }
+  })
+
+  // 4. Return Pesan Response Dinamis
+  let pesan = ''
+  if (isPreTest) {
+    pesan = `Pre-Test selesai! Skor awal kamu: ${skor}. Silakan lanjut ke materi modul.`
+  } else if (isLolos) {
+    pesan = 'Selamat! Kamu lulus Post-Test modul ini.'
+  } else if (mustRepeat) {
+    pesan = `Kamu telah gagal Post-Test ${maxAttempts}x. Status modul di-reset ke awal.`
+  } else {
+    pesan = `Nilai Post-Test (${skor}) belum mencapai passing grade (${passingScore}%). Sisa percobaan: ${maxAttempts - currentAttempts}`
+  }
+
   return {
+    tipeEvaluasi: evaluationAda.tipe,
     totalSoal,
     benar: totalBenar,
     salah: totalSoal - totalBenar,
@@ -264,16 +293,12 @@ const submitJawaban = async (evaluationId, userId, data) => {
     percobaanKe: currentAttempts,
     sisaPercobaan: Math.max(0, maxAttempts - currentAttempts),
     mustRepeat,
-    pesan: isLolos
-      ? 'Selamat! Kamu lolos evaluasi modul ini.'
-      : mustRepeat
-      ? `Kamu telah gagal ${maxAttempts}x. Status modul di-reset, kamu harus mengulang mempelajari materi dari awal!`
-      : `Nilai kamu (${skor}) belum mencapai standar minimal (${passingScore}%). Sisa percobaan: ${maxAttempts - currentAttempts}`
+    pesan
   }
 }
 
 // ================================================
-// GET ANSWERS — Admin melihat seluruh hasil evaluasi
+// GET ANSWERS (Admin)
 // ================================================
 const getAnswersByEvaluation = async (evaluationId) => {
   const evaluationAda = await prisma.evaluation.findUnique({
@@ -304,7 +329,7 @@ const getAnswersByEvaluation = async (evaluationId) => {
             select: {
               id: true,
               teksOpsi: true,
-              isCorrect: true // Admin dapat melihat mana opsi yang benar
+              isCorrect: true
             }
           }
         }
@@ -317,7 +342,7 @@ const getAnswersByEvaluation = async (evaluationId) => {
 }
 
 // ================================================
-// GET MY ANSWERS — User/Guru melihat riwayat jawabannya
+// GET MY ANSWERS (Guru)
 // ================================================
 const getMyAnswers = async (evaluationId, userId) => {
   const evaluationAda = await prisma.evaluation.findUnique({
@@ -357,6 +382,7 @@ const getMyAnswers = async (evaluationId, userId) => {
   const total = answers.length
 
   return {
+    tipeEvaluasi: evaluationAda.tipe,
     skor: total > 0 ? Math.round((benar / total) * 100) : 0,
     benar,
     totalSoal: total,
@@ -378,7 +404,6 @@ const updateQuestion = async (questionId, data) => {
     throw new Error('Soal tidak ditemukan')
   }
 
-  // Jika menyertakan opsi baru, lakukan validasi
   if (options) {
     if (options.length < 2) {
       throw new Error('Soal pilihan ganda harus memiliki minimal 2 pilihan jawaban')
@@ -389,10 +414,8 @@ const updateQuestion = async (questionId, data) => {
     }
   }
 
-  // Update pertanyaan & ganti opsi jawaban secara transaksional
   const updatedQuestion = await prisma.$transaction(async (tx) => {
     if (options) {
-      // Hapus opsi lama
       await tx.option.deleteMany({
         where: { questionId }
       })
@@ -430,7 +453,6 @@ const deleteQuestion = async (questionId) => {
     throw new Error('Soal tidak ditemukan')
   }
 
-  // Hapus soal (Prisma cascade otomatis menghapus options terkait)
   await prisma.question.delete({
     where: { id: questionId }
   })

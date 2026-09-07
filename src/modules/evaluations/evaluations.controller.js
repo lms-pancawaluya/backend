@@ -15,7 +15,6 @@ const getEvaluationsByModule = async (req, res) => {
       jumlah: evaluations.length,
       data: evaluations
     })
-
   } catch (error) {
     return res.status(404).json({
       sukses: false,
@@ -36,7 +35,6 @@ const getEvaluationById = async (req, res) => {
       sukses: true,
       data: evaluation
     })
-
   } catch (error) {
     return res.status(404).json({
       sukses: false,
@@ -46,12 +44,12 @@ const getEvaluationById = async (req, res) => {
 }
 
 // ================================================
-// CREATE EVALUATION — Hanya admin
+// CREATE EVALUATION — Hanya admin (Pre-Test & Post-Test)
 // ================================================
 const createEvaluation = async (req, res) => {
   try {
     const { moduleId } = req.params
-    const { judul, passingScore, maxAttempts } = req.body
+    const { judul, tipe, passingScore, maxAttempts } = req.body
 
     if (!judul) {
       return res.status(400).json({
@@ -62,7 +60,7 @@ const createEvaluation = async (req, res) => {
 
     const evaluationBaru = await evaluationsService.createEvaluation(
       moduleId,
-      { judul, passingScore, maxAttempts }
+      { judul, tipe, passingScore, maxAttempts }
     )
 
     return res.status(201).json({
@@ -70,7 +68,6 @@ const createEvaluation = async (req, res) => {
       pesan: 'Evaluasi berhasil dibuat',
       data: evaluationBaru
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -80,14 +77,13 @@ const createEvaluation = async (req, res) => {
 }
 
 // ================================================
-// CREATE QUESTION — Hanya admin (Murni Pilihan Ganda)
+// CREATE QUESTION — Hanya admin
 // ================================================
 const createQuestion = async (req, res) => {
   try {
     const { id } = req.params
     const { pertanyaan, options } = req.body
 
-    // Validasi field wajib
     if (!pertanyaan) {
       return res.status(400).json({
         sukses: false,
@@ -95,7 +91,6 @@ const createQuestion = async (req, res) => {
       })
     }
 
-    // Validasi opsi jawaban pilihan ganda
     if (!options || !Array.isArray(options) || options.length < 2) {
       return res.status(400).json({
         sukses: false,
@@ -113,7 +108,6 @@ const createQuestion = async (req, res) => {
       pesan: 'Soal berhasil ditambahkan',
       data: questionBaru
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -140,7 +134,6 @@ const updateQuestion = async (req, res) => {
       pesan: 'Soal evaluasi berhasil diperbarui',
       data: updatedQuestion
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -161,7 +154,6 @@ const deleteQuestion = async (req, res) => {
       sukses: true,
       pesan: result.pesan
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -179,7 +171,6 @@ const submitJawaban = async (req, res) => {
     const { jawaban } = req.body
     const userId = req.user.id
 
-    // Validasi jawaban harus array dan tidak kosong
     if (!jawaban || !Array.isArray(jawaban) || jawaban.length === 0) {
       return res.status(400).json({
         sukses: false,
@@ -187,7 +178,6 @@ const submitJawaban = async (req, res) => {
       })
     }
 
-    // Validasi setiap item jawaban harus punya questionId dan jawaban (optionId)
     const jawabanValid = jawaban.every(
       item => item.questionId && item.jawaban
     )
@@ -206,7 +196,6 @@ const submitJawaban = async (req, res) => {
       pesan: 'Jawaban berhasil disubmit',
       data: hasil
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -228,7 +217,6 @@ const getAnswersByEvaluation = async (req, res) => {
       jumlah: answers.length,
       data: answers
     })
-
   } catch (error) {
     return res.status(404).json({
       sukses: false,
@@ -251,7 +239,6 @@ const getMyAnswers = async (req, res) => {
       sukses: true,
       data: hasil
     })
-
   } catch (error) {
     return res.status(404).json({
       sukses: false,

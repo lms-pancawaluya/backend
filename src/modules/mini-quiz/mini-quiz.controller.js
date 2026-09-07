@@ -10,8 +10,9 @@ const getMiniQuizByContent = async (req, res) => {
     const { contentId } = req.params
     // Mengambil role dari req.user yang di-set oleh authMiddleware
     const role = req.user?.role 
+    const userId = req.user?.id
 
-    const miniQuizzes = await miniQuizService.getMiniQuizByContent(contentId, role)
+    const miniQuizzes = await miniQuizService.getMiniQuizByContent(contentId, role, userId)
 
     if (!miniQuizzes || miniQuizzes.length === 0) {
       return res.status(200).json({

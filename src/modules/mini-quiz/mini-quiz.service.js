@@ -5,7 +5,7 @@ const prisma = require('../../config/database')
 // ================================================
 // GET MINI QUIZ BY CONTENT — Ambil mini kuis
 // ================================================
-const getMiniQuizByContent = async (contentId, role) => {
+const getMiniQuizByContent = async (contentId, role, userId) => {
   const isAdmin = role === 'admin'
 
   const miniQuizzes = await prisma.miniQuiz.findMany({
@@ -17,6 +17,10 @@ const getMiniQuizByContent = async (contentId, role) => {
       passingScore: true,
       maxAttempts: true,
       createdAt: true,
+      attempts: userId ? {
+        where: { userId },
+        select: { isLolos: true }
+      } : false,
       questions: {
         select: {
           id: true,
@@ -34,7 +38,15 @@ const getMiniQuizByContent = async (contentId, role) => {
     orderBy: { timestampSeconds: 'asc' }
   })
 
-  return miniQuizzes
+  return miniQuizzes.map(quiz => {
+    const isLolos = quiz.attempts ? quiz.attempts.some(a => a.isLolos) : false
+    const { attempts, ...quizData } = quiz
+
+    return {
+      ...quizData,
+      isLolos
+    }
+  })
 }
 
 // ================================================
@@ -259,7 +271,7 @@ const getMyAttempts = async (userId, miniQuizId) => {
 }
 
 // ================================================
-// SUBMIT ATTEMPT — Guru kerjakan mini kuis (FULLY FIXED)
+// SUBMIT ATTEMPT — Guru kerjakan mini kuis
 // ================================================
 const submitAttempt = async (userId, miniQuizId, data) => {
   const { jawaban } = data
@@ -285,21 +297,6 @@ const submitAttempt = async (userId, miniQuizId, data) => {
     where: { userId, miniQuizId },
     orderBy: { attemptNumber: 'asc' }
   })
-
-  const sudahLulus = attempts.some(a => a.isLolos)
-  if (sudahLulus) {
-    return {
-      attemptNumber: attempts.length,
-      skor: 100,
-      isLolos: true,
-      benar: miniQuiz.questions.length,
-      totalSoal: miniQuiz.questions.length,
-      passingScore: miniQuiz.passingScore,
-      sisaPercobaan: 0,
-      mustRepeat: false,
-      pesan: 'Kamu sudah lulus mini kuis ini sebelumnya. Silakan lanjut ke materi berikutnya!'
-    }
-  }
 
   let benar = 0
   const totalSoal = miniQuiz.questions.length

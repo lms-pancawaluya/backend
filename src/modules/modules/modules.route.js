@@ -8,50 +8,33 @@ const roleMiddleware = require('../../middlewares/role.middleware')
 const contentsRoute = require('../contents/contents.route')
 const evaluationsRoute = require('../evaluations/evaluations.route')
 
-// ================================================
-// Nested route — contents di dalam modules
-// ================================================
+// Nested routes
 router.use('/:moduleId/contents', contentsRoute)
 router.use('/:moduleId/evaluations', evaluationsRoute)
 
-// ================================================
-// PUBLIC ROUTES — Semua user yang sudah login
-// ================================================
+// PUBLIC / GENERAL ROUTES
+router.get('/', authMiddleware, modulesController.getAllModules)
+router.get('/:id', authMiddleware, modulesController.getModuleById)
 
-// GET /api/modules — Admin & Guru bisa lihat semua modul
-router.get('/',
+// PENGELOLA ROUTES (Admin & Pengajar)
+router.post(
+  '/',
   authMiddleware,
-  modulesController.getAllModules
-)
-
-// GET /api/modules/:id — Admin & Guru bisa lihat detail modul
-router.get('/:id',
-  authMiddleware,
-  modulesController.getModuleById
-)
-
-// ================================================
-// ADMIN ONLY ROUTES
-// ================================================
-
-// POST /api/modules — Hanya admin buat modul baru
-router.post('/',
-  authMiddleware,
-  roleMiddleware('admin'),
+  roleMiddleware('admin', 'pengajar'),
   modulesController.createModule
 )
 
-// PUT /api/modules/:id — Hanya admin update modul
-router.put('/:id',
+router.put(
+  '/:id',
   authMiddleware,
-  roleMiddleware('admin'),
+  roleMiddleware('admin', 'pengajar'),
   modulesController.updateModule
 )
 
-// DELETE /api/modules/:id — Hanya admin hapus modul
-router.delete('/:id',
+router.delete(
+  '/:id',
   authMiddleware,
-  roleMiddleware('admin'),
+  roleMiddleware('admin'), // Hapus modul sebaiknya tetap Admin
   modulesController.deleteModule
 )
 

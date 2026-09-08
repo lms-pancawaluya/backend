@@ -62,9 +62,9 @@ enum TicketStatus {
   closed
 }
 
-enum ModuleType {
-  offline // Modul Tatap Muka
-  online  // Modul Mandiri
+enum CourseMode {
+  offline // Course Tatap Muka
+  online  // Course Mandiri
 }
 
 enum EvaluationType {
@@ -78,50 +78,75 @@ enum EvaluationType {
 // ==========================================
 
 model User {
-  id           String    @id @default(uuid())
+  id           String        @id @default(uuid())
   nama         String
-  email        String    @unique
+  email        String        @unique
   password     String
-  role         Role      @default(guru)
-  status       UserStatus @default(aktif) @map("status")
-  nip          String?   @unique @map("nip")
-  sekolah      String?   @map("sekolah")
-  kotaKab      String?   @map("kota/kab")
-  kecamatan    String?   @map("kecamatan")
-  noHp         String?   @map("no_hp")
-  fotoProfil   String?   @map("foto_profil")
-  isVerified   Boolean   @default(false) @map("is_verified")
-  otpCode      String?   @map("otp_code")
-  otpExpiresAt DateTime? @map("otp_expires_at")
-  gelar        String?   @map("gelar")
-  createdAt    DateTime  @default(now()) @map("created_at")
+  role         Role          @default(guru)
+  status       UserStatus    @default(aktif) @map("status")
+  nip          String?       @unique @map("nip")
+  sekolah      String?       @map("sekolah")
+  kotaKab      String?       @map("kota/kab")
+  kecamatan    String?       @map("kecamatan")
+  noHp         String?       @map("no_hp")
+  fotoProfil   String?       @map("foto_profil")
+  isVerified   Boolean       @default(false) @map("is_verified")
+  otpCode      String?       @map("otp_code")
+  otpExpiresAt DateTime?     @map("otp_expires_at")
+  gelar        String?       @map("gelar")
+  createdAt    DateTime      @default(now()) @map("created_at")
 
   // Relasi
-  progress         user_progress[]
-  answers          user_answers[]
+  courseProgress user_course_progress[]
+  progress       user_progress[]
+  answers        user_answers[]
   miniQuizAttempts MiniQuizAttempt[]
-  feedbacks        Feedback[]
-  comments         Comment[]
-  rtlSubmissions   RtlSubmission[]
-  reviewedRtls     RtlSubmission[]   @relation("TrainerRtlReviewer")
-  tickets          Ticket[]          @relation("UserTickets")
-  ticketReplies    TicketReply[]     @relation("UserTicketReplies")
-  notifications    Notification[]
-  certificates     Certificate[]
+  feedbacks      Feedback[]
+  comments       Comment[]
+  rtlSubmissions RtlSubmission[]
+  reviewedRtls   RtlSubmission[]        @relation("TrainerRtlReviewer")
+  tickets        Ticket[]               @relation("UserTickets")
+  ticketReplies  TicketReply[]          @relation("UserTicketReplies")
+  notifications  Notification[]
+  certificates   Certificate[]
 
   @@map("users")
 }
 
+model Course {
+  id             String      @id @default(uuid())
+  judul          String
+  deskripsi      String      @db.Text
+  coverUrl       String?     @map("cover_url")
+  mode           CourseMode  @default(online)
+  hasCertificate Boolean     @default(true) @map("has_certificate")
+  
+  // Detail khusus jika mode Offline
+  lokasi         String?
+  tanggalMulai   DateTime?   @map("tanggal_mulai")
+  tanggalSelesai DateTime?   @map("tanggal_selesai")
+
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  // Relasi
+  modules        Module[]
+  courseProgress user_course_progress[]
+  certificates   Certificate[]
+
+  @@map("courses")
+}
+
 model Module {
   id               String            @id @default(uuid())
+  courseId         String?           @map("course_id") // Optional jika modul belum dimasukkan ke course
   judul            String
   deskripsi        String            @db.Text
   aspekPancawaluya AspekPancawaluya? @default(umum) @map("aspek_pancawaluya")
-  tipe             ModuleType        @default(online)
   urutan           Int
   createdAt        DateTime          @default(now()) @map("created_at")
 
   // Relasi
+  course         Course?         @relation(fields: [courseId], references: [id], onDelete: Cascade)
   contents       Content[]
   evaluations    Evaluation[]
   progress       user_progress[]
@@ -129,6 +154,7 @@ model Module {
   rtlSubmissions RtlSubmission[]
   comments       Comment[]
 
+  @@index([courseId])
   @@map("modules")
 }
 
@@ -196,12 +222,29 @@ model Option {
   @@map("options")
 }
 
+model user_course_progress {
+  id          String         @id @default(uuid())
+  userId      String         @map("user_id")
+  courseId    String         @map("course_id")
+  status      ProgressStatus @default(belum_mulai)
+  completedAt DateTime?      @map("completed_at")
+
+  // Relasi
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+  @@map("user_course_progress")
+}
+
 model user_progress {
   id          String         @id @default(uuid())
   userId      String         @map("user_id")
   moduleId    String         @map("module_id")
   status      ProgressStatus @default(belum_mulai)
-  preTestSkor Int?           @default(0) @map("pre_test_skor") // Menyimpan nilai pre-test secara khusus
+  preTestSkor Int?           @default(0) @map("pre_test_skor")
   skor        Int?           @default(0) // Skor post-test / evaluasi utama
   attempts    Int            @default(0)
   completedAt DateTime?      @map("completed_at")
@@ -268,9 +311,9 @@ model Comment {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relasi
-  module  Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  module  Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies Comment[] @relation("CommentReplies")
 
   @@index([moduleId])
@@ -309,13 +352,17 @@ model RtlSubmission {
 model Certificate {
   id              String   @id @default(uuid())
   userId          String   @map("user_id")
+  courseId        String   @map("course_id") // Sertifikat terikat pada level Course
   nomorSertifikat String   @unique @map("nomor_sertifikat")
   fileUrl         String   @map("file_url") @db.Text
   issuedAt        DateTime @default(now()) @map("issued_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relasi
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([courseId])
   @@map("certificates")
 }
 

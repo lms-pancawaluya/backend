@@ -8,8 +8,8 @@ const usersService = require('../users/users.service')
 // ================================================
 const register = async (req, res) => {
   try {
-    // 1. Ambil data dari request body (termasuk gelar & nip)
-    const { nama, email, password, gelar, nip, sekolah, kotaKab, kecamatan } = req.body
+    // 1. Ambil data dari request body (termasuk schoolId)
+    const { nama, email, password, gelar, nip, schoolId, sekolah, kotaKab, kecamatan } = req.body
 
     // 2. Validasi — pastikan semua field wajib diisi
     if (!nama || !email || !password) {
@@ -36,8 +36,18 @@ const register = async (req, res) => {
       }) 
     }
 
-    // 5. Panggil service untuk proses register (teruskan gelar & nip)
-    const hasil = await authService.register({ nama, email, password, gelar, nip, sekolah, kotaKab, kecamatan })
+    // 5. Panggil service untuk proses register (teruskan schoolId)
+    const hasil = await authService.register({ 
+      nama, 
+      email, 
+      password, 
+      gelar, 
+      nip, 
+      schoolId, 
+      sekolah, 
+      kotaKab, 
+      kecamatan 
+    })
 
     // 6. Kirim response sukses
     return res.status(201).json({
@@ -115,7 +125,6 @@ const resendOtp = async (req, res) => {
 // ================================================
 const login = async (req, res) => {
   try {
-    // Menerima identifier (Email atau NIP) atau email (untuk dukungan versi lama)
     const { identifier, email, password } = req.body
     const loginIdentifier = identifier || email
 

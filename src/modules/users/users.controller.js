@@ -1,3 +1,5 @@
+// src/modules/users/users.controller.js
+
 const usersService = require('./users.service')
 
 // ================================================
@@ -37,7 +39,6 @@ const getUserById = async (req, res) => {
   try {
     const { id } = req.params
 
-    // Admin & Pengajar bisa lihat semua, Guru hanya miliknya sendiri
     if (!['admin', 'pengajar'].includes(req.user.role) && req.user.id !== id) {
       return res.status(403).json({
         sukses: false,
@@ -66,9 +67,8 @@ const getUserById = async (req, res) => {
 const updateUser = async (req, res) => {
   try {
     const { id } = req.params
-    const { nama, email, role, gelar, nip, sekolah, kotaKab, kecamatan, noHp, fotoProfil, status } = req.body
+    const { nama, email, role, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp, fotoProfil, status } = req.body
 
-    // REVISI: Admin & Pengajar bisa update data user lain, Guru hanya bisa update akunnya sendiri
     if (!['admin', 'pengajar'].includes(req.user.role) && req.user.id !== id) {
       return res.status(403).json({
         sukses: false,
@@ -76,7 +76,6 @@ const updateUser = async (req, res) => {
       })
     }
 
-    // Hanya Admin yang bisa mengubah Role
     if (req.user.role !== 'admin' && role) {
       return res.status(403).json({
         sukses: false,
@@ -90,13 +89,14 @@ const updateUser = async (req, res) => {
       role,
       gelar,
       nip,
+      schoolId,
       sekolah,
       kotaKab,
       kecamatan,
       noHp,
       fotoProfil,
       status
-    }, req.user) // Passing req.user untuk validasi role pengubah
+    }, req.user)
 
     return res.status(200).json({
       sukses: true,
@@ -175,14 +175,14 @@ const getMyProfile = async (req, res) => {
 const updateMyProfile = async (req, res) => {
   try {
     const userId = req.user.id
-    const { nama, email, gelar, nip, sekolah, kotaKab, kecamatan, noHp } = req.body
+    const { nama, email, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp } = req.body
 
-    // Pass req.user.role agar service tahu kalau role 'guru' tidak boleh ubah sekolah/lokasi
     const userUpdated = await usersService.updateMyProfile(userId, {
       nama,
       email,
       gelar,
       nip,
+      schoolId,
       sekolah,
       kotaKab,
       kecamatan,

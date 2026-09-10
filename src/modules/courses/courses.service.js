@@ -1,8 +1,15 @@
 const prisma = require('../../config/database');
 
 class CoursesService {
-  // 1. Ambil daftar semua Course
-  async getAllCourses(userId, query = {}) {
+  // Helper internal untuk melempar error dengan status code HTTP
+  createError(message, statusCode) {
+    const error = new Error(message);
+    error.statusCode = statusCode;
+    return error;
+  }
+
+  // 1. Ambil daftar Course (Filtering Otomatis berdasarkan Role & School)
+  async getAllCourses(user, query = {}) {
     const { mode } = query;
     const where = {};
 
@@ -10,15 +17,30 @@ class CoursesService {
       where.mode = mode;
     }
 
+    // LOGIK SCHOOL-SCOPE FILTERING
+    if (user && user.role !== 'admin') {
+      // Guru & Pengajar hanya melihat:
+      // - Course GLOBAL (schoolId: null)
+      // - ATAU Course khusus sekolah pengguna (schoolId: user.schoolId)
+      where.OR = [
+        { schoolId: null },
+        { schoolId: user.schoolId || 'NO_SCHOOL_MATCH' },
+      ];
+    }
+    // Note: Admin tidak terkena filter OR (bebas melihat semua Course)
+
     const courses = await prisma.course.findMany({
       where,
       include: {
+        school: {
+          select: { id: true, nama: true, npsn: true },
+        },
         modules: {
           select: { id: true },
         },
-        courseProgress: userId
+        courseProgress: user?.id
           ? {
-              where: { userId },
+              where: { userId: user.id },
             }
           : false,
       },
@@ -30,10 +52,10 @@ class CoursesService {
         const totalModules = course.modules.length;
         let completedModulesCount = 0;
 
-        if (userId && totalModules > 0) {
+        if (user?.id && totalModules > 0) {
           const completedModules = await prisma.user_progress.count({
             where: {
-              userId,
+              userId: user.id,
               moduleId: { in: course.modules.map((m) => m.id) },
               status: 'selesai',
             },
@@ -56,6 +78,10 @@ class CoursesService {
           lokasi: course.lokasi,
           tanggalMulai: course.tanggalMulai,
           tanggalSelesai: course.tanggalSelesai,
+          schoolId: course.schoolId,
+          school: course.school,
+          isGlobal: !course.schoolId,
+          createdBy: course.createdBy,
           totalModules,
           completedModules: completedModulesCount,
           progressPercentage,
@@ -66,11 +92,17 @@ class CoursesService {
     );
   }
 
-  // 2. Ambil Detail Course + Daftar Modul (Sesuai Flow Guru & Locking Logic)
-  async getCourseById(courseId, userId) {
+  // 2. Ambil Detail Course + Daftar Modul (Sesuai Access Control)
+  async getCourseById(courseId, user) {
     const course = await prisma.course.findUnique({
       where: { id: courseId },
       include: {
+        school: {
+          select: { id: true, nama: true, npsn: true },
+        },
+        creator: {
+          select: { id: true, nama: true, email: true },
+        },
         modules: {
           orderBy: { urutan: 'asc' },
           include: {
@@ -82,14 +114,25 @@ class CoursesService {
     });
 
     if (!course) {
-      throw new Error('Course tidak ditemukan');
+      throw this.createError('Course tidak ditemukan', 404);
+    }
+
+    // Validasi Akses School Scope
+    if (course.schoolId) {
+      if (!user) {
+        throw this.createError('Kamu perlu login untuk mengakses Course sekolah ini', 401);
+      }
+
+      if (user.role !== 'admin' && course.schoolId !== user.schoolId) {
+        throw this.createError('Kamu tidak memiliki akses ke Course sekolah ini', 403);
+      }
     }
 
     let userProgressMap = {};
-    if (userId) {
+    if (user?.id) {
       const progresses = await prisma.user_progress.findMany({
         where: {
-          userId,
+          userId: user.id,
           moduleId: { in: course.modules.map((m) => m.id) },
         },
       });
@@ -103,15 +146,11 @@ class CoursesService {
     const formattedModules = course.modules.map((module) => {
       const userProg = userProgressMap[module.id] || null;
       const isCompleted = userProg?.status === 'selesai';
-
-      // Logika Locking: Terkunci jika modul sebelumnya belum selesai
       const isLocked = !isPreviousModuleCompleted;
 
-      // Ambil Pre-Test dan Post-Test
       const preTest = module.evaluations.find((e) => e.tipe === 'pre_test');
       const postTest = module.evaluations.find((e) => e.tipe === 'post_test');
 
-      // Evaluasi kelulusan per step
       const preTestCompleted = !preTest || (userProg?.preTestSkor ?? 0) > 0;
       const postTestCompleted =
         !postTest || (userProg?.skor ?? 0) >= (postTest?.passingScore || 80);
@@ -140,9 +179,7 @@ class CoursesService {
         },
       };
 
-      // Set patokan untuk modul berikutnya
       isPreviousModuleCompleted = isCompleted;
-
       return moduleData;
     });
 
@@ -163,6 +200,11 @@ class CoursesService {
       lokasi: course.lokasi,
       tanggalMulai: course.tanggalMulai,
       tanggalSelesai: course.tanggalSelesai,
+      schoolId: course.schoolId,
+      school: course.school,
+      creator: course.creator,
+      isGlobal: !course.schoolId,
+      createdBy: course.createdBy,
       progressPercentage: courseProgressPercentage,
       isCourseCompleted:
         totalModules > 0 && completedCount === totalModules,
@@ -172,8 +214,21 @@ class CoursesService {
     };
   }
 
-  // 3. Buat Course Baru
-  async createCourse(data) {
+  // 3. Buat Course Baru (Otomatis Inject createdBy & schoolId)
+  async createCourse(data, user) {
+    if (!user) {
+      throw this.createError('Pengguna tidak terautentikasi', 401);
+    }
+
+    // Jika Admin -> schoolId = null (GLOBAL)
+    // Jika Pengajar -> schoolId = user.schoolId
+    const targetSchoolId = user.role === 'admin' ? null : (user.schoolId || null);
+
+    // Pengajar harus terikat dengan sekolah jika ingin membuat course
+    if (user.role === 'pengajar' && !targetSchoolId) {
+      throw this.createError('Pengajar harus terhubung dengan sekolah untuk membuat Course', 400);
+    }
+
     return await prisma.course.create({
       data: {
         judul: data.judul,
@@ -184,24 +239,79 @@ class CoursesService {
         lokasi: data.lokasi || null,
         tanggalMulai: data.tanggalMulai ? new Date(data.tanggalMulai) : null,
         tanggalSelesai: data.tanggalSelesai ? new Date(data.tanggalSelesai) : null,
+        createdBy: user.id,
+        schoolId: targetSchoolId,
+      },
+      include: {
+        school: {
+          select: { id: true, nama: true },
+        },
       },
     });
   }
 
-  // 4. Update Course
-  async updateCourse(id, data) {
+  // 4. Update Course (Validasi Ownership & Scope)
+  async updateCourse(id, data, user) {
+    const existingCourse = await prisma.course.findUnique({ where: { id } });
+    if (!existingCourse) {
+      throw this.createError('Course tidak ditemukan', 404);
+    }
+
+    // Validasi Akses Pengajar
+    if (user.role !== 'admin') {
+      const isOwner = existingCourse.createdBy === user.id;
+      const isSameSchool =
+        existingCourse.schoolId && existingCourse.schoolId === user.schoolId;
+
+      if (!isOwner && !isSameSchool) {
+        throw this.createError('Kamu tidak memiliki akses untuk mengubah Course ini', 403);
+      }
+    }
+
+    const {
+      judul,
+      deskripsi,
+      coverUrl,
+      mode,
+      hasCertificate,
+      lokasi,
+      tanggalMulai,
+      tanggalSelesai,
+    } = data;
+
     return await prisma.course.update({
       where: { id },
       data: {
-        ...data,
-        tanggalMulai: data.tanggalMulai ? new Date(data.tanggalMulai) : undefined,
-        tanggalSelesai: data.tanggalSelesai ? new Date(data.tanggalSelesai) : undefined,
+        judul,
+        deskripsi,
+        coverUrl,
+        mode,
+        hasCertificate,
+        lokasi,
+        tanggalMulai: tanggalMulai ? new Date(tanggalMulai) : undefined,
+        tanggalSelesai: tanggalSelesai ? new Date(tanggalSelesai) : undefined,
       },
     });
   }
 
-  // 5. Hapus Course
-  async deleteCourse(id) {
+  // 5. Hapus Course (Validasi Ownership & Scope)
+  async deleteCourse(id, user) {
+    const existingCourse = await prisma.course.findUnique({ where: { id } });
+    if (!existingCourse) {
+      throw this.createError('Course tidak ditemukan', 404);
+    }
+
+    // Validasi Akses Pengajar
+    if (user.role !== 'admin') {
+      const isOwner = existingCourse.createdBy === user.id;
+      const isSameSchool =
+        existingCourse.schoolId && existingCourse.schoolId === user.schoolId;
+
+      if (!isOwner && !isSameSchool) {
+        throw this.createError('Kamu tidak memiliki akses untuk menghapus Course ini', 403);
+      }
+    }
+
     return await prisma.course.delete({
       where: { id },
     });

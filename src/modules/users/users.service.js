@@ -1,3 +1,5 @@
+// src/modules/users/users.service.js
+
 const bcrypt = require('bcryptjs')
 const prisma = require('../../config/database')
 
@@ -11,29 +13,28 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
 
   // 1. LOGIKA SCOPING UNTUK ROLE PENGAJAR
   if (currentUser.role === 'pengajar') {
-    // Pengajar HANYA BISA melihat akun bertipe 'guru'
     whereClause.role = 'guru'
     
+    let schoolIdPengajar = currentUser.schoolId
     let sekolahPengajar = currentUser.sekolah
 
-    // Fallback: Jika di payload token JWT belum/tidak ada data sekolah, 
-    // tarik langsung data sekolah pengajar dari Database
-    if (!sekolahPengajar && currentUser.id) {
+    if (!schoolIdPengajar && !sekolahPengajar && currentUser.id) {
       const dbPengajar = await prisma.user.findUnique({
         where: { id: currentUser.id },
-        select: { sekolah: true }
+        select: { schoolId: true, sekolah: true }
       })
+      schoolIdPengajar = dbPengajar?.schoolId
       sekolahPengajar = dbPengajar?.sekolah
     }
 
-    // Filter guru yang berasal dari sekolah yang sama dengan pengajar
-    if (sekolahPengajar) {
+    // Utamakan filter berdasarkan schoolId (UUID)
+    if (schoolIdPengajar) {
+      whereClause.schoolId = schoolIdPengajar
+    } else if (sekolahPengajar) {
       whereClause.sekolah = sekolahPengajar
     }
   } else {
-    // Untuk Admin / role lain: gunakan query param role jika ada
     if (role) whereClause.role = role
-    // Gunakan query param sekolah jika ada (hanya untuk Admin)
     if (sekolah) whereClause.sekolah = { contains: sekolah, mode: 'insensitive' }
   }
 
@@ -59,6 +60,7 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
       role: true,
       gelar: true,
       nip: true,
+      schoolId: true,
       sekolah: true,
       kotaKab: true,
       kecamatan: true,
@@ -66,6 +68,13 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
       fotoProfil: true,
       status: true,
       createdAt: true,
+      school: {
+        select: {
+          id: true,
+          nama: true,
+          npsn: true
+        }
+      },
       progress: {
         where: { status: 'selesai' },
         select: { id: true }
@@ -83,6 +92,7 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
       role: user.role,
       gelar: user.gelar,
       nip: user.nip,
+      schoolId: user.schoolId,
       sekolah: user.sekolah,
       kotaKab: user.kotaKab,
       kecamatan: user.kecamatan,
@@ -90,6 +100,7 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
       fotoProfil: user.fotoProfil,
       status: user.status,
       createdAt: user.createdAt,
+      school: user.school,
       modulSelesai: userProgressList.length
     }
   })
@@ -108,6 +119,7 @@ const getUserById = async (id) => {
       role: true,
       gelar: true,
       nip: true,
+      schoolId: true,
       sekolah: true,
       kotaKab: true,
       kecamatan: true,
@@ -115,6 +127,15 @@ const getUserById = async (id) => {
       fotoProfil: true,
       status: true,
       createdAt: true,
+      school: {
+        select: {
+          id: true,
+          nama: true,
+          npsn: true,
+          bentuk: true,
+          statusSekolah: true
+        }
+      },
       progress: {
         select: {
           status: true,
@@ -141,7 +162,7 @@ const getUserById = async (id) => {
 // UPDATE USER (BY ADMIN & PENGAJAR)
 // ================================================
 const updateUser = async (id, data, currentUser) => {
-  const { nama, email, role, gelar, sekolah, kotaKab, kecamatan, noHp, fotoProfil, status } = data
+  const { nama, email, role, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp, fotoProfil, status } = data
 
   const userAda = await prisma.user.findUnique({
     where: { id }
@@ -151,7 +172,6 @@ const updateUser = async (id, data, currentUser) => {
     throw new Error('User tidak ditemukan')
   }
 
-  // Jika yang mengedit adalah Pengajar, Pengajar tidak boleh mengedit sesama Pengajar atau Admin
   if (currentUser && currentUser.role === 'pengajar' && userAda.role !== 'guru') {
     throw new Error('Akses ditolak. Pengajar hanya bisa mengubah data Guru.')
   }
@@ -179,9 +199,25 @@ const updateUser = async (id, data, currentUser) => {
   }
 
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
-  if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
-  if (kotaKab !== undefined) payloadToUpdate.kotaKab = kotaKab
-  if (kecamatan !== undefined) payloadToUpdate.kecamatan = kecamatan
+  if (nip !== undefined) payloadToUpdate.nip = nip
+
+  // Sinkronisasi MasterSekolah jika schoolId diupdate
+  if (schoolId) {
+    const masterSekolah = await prisma.masterSekolah.findUnique({
+      where: { id: schoolId }
+    })
+    if (masterSekolah) {
+      payloadToUpdate.schoolId = masterSekolah.id
+      payloadToUpdate.sekolah = masterSekolah.nama
+      payloadToUpdate.kotaKab = masterSekolah.kotaKab
+      payloadToUpdate.kecamatan = masterSekolah.kecamatan
+    }
+  } else {
+    if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
+    if (kotaKab !== undefined) payloadToUpdate.kotaKab = kotaKab
+    if (kecamatan !== undefined) payloadToUpdate.kecamatan = kecamatan
+  }
+
   if (noHp !== undefined) payloadToUpdate.noHp = noHp
   if (fotoProfil !== undefined) payloadToUpdate.fotoProfil = fotoProfil
 
@@ -206,13 +242,21 @@ const updateUser = async (id, data, currentUser) => {
       role: true,
       gelar: true,
       nip: true,
+      schoolId: true,
       sekolah: true,
       kotaKab: true,
       kecamatan: true,
       noHp: true,
       fotoProfil: true,
       status: true,
-      createdAt: true
+      createdAt: true,
+      school: {
+        select: {
+          id: true,
+          nama: true,
+          npsn: true
+        }
+      }
     }
   })
 }
@@ -221,7 +265,7 @@ const updateUser = async (id, data, currentUser) => {
 // UPDATE MY PROFILE (DIBATASI KHUSUS ROLE GURU)
 // ================================================
 const updateMyProfile = async (userId, data, userRole) => {
-  const { nama, email, gelar, nip, sekolah, kotaKab, kecamatan, noHp } = data
+  const { nama, email, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp } = data
 
   const userAda = await prisma.user.findUnique({ where: { id: userId } })
   if (!userAda) throw new Error('User tidak ditemukan')
@@ -230,13 +274,26 @@ const updateMyProfile = async (userId, data, userRole) => {
 
   if (nama) payloadToUpdate.nama = nama
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
+  if (nip !== undefined) payloadToUpdate.nip = nip
   if (noHp !== undefined) payloadToUpdate.noHp = noHp
 
   // Hanya izinkan update sekolah & lokasi jika BUKAN GURU
   if (userRole !== 'guru') {
-    if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
-    if (kotaKab !== undefined) payloadToUpdate.kotaKab = kotaKab
-    if (kecamatan !== undefined) payloadToUpdate.kecamatan = kecamatan
+    if (schoolId) {
+      const masterSekolah = await prisma.masterSekolah.findUnique({
+        where: { id: schoolId }
+      })
+      if (masterSekolah) {
+        payloadToUpdate.schoolId = masterSekolah.id
+        payloadToUpdate.sekolah = masterSekolah.nama
+        payloadToUpdate.kotaKab = masterSekolah.kotaKab
+        payloadToUpdate.kecamatan = masterSekolah.kecamatan
+      }
+    } else {
+      if (sekolah !== undefined) payloadToUpdate.sekolah = sekolah
+      if (kotaKab !== undefined) payloadToUpdate.kotaKab = kotaKab
+      if (kecamatan !== undefined) payloadToUpdate.kecamatan = kecamatan
+    }
   }
 
   if (email && email !== userAda.email) {
@@ -255,13 +312,21 @@ const updateMyProfile = async (userId, data, userRole) => {
       role: true,
       gelar: true,
       nip: true,
+      schoolId: true,
       sekolah: true,
       kotaKab: true,
       kecamatan: true,
       noHp: true,
       fotoProfil: true,
       status: true,
-      createdAt: true
+      createdAt: true,
+      school: {
+        select: {
+          id: true,
+          nama: true,
+          npsn: true
+        }
+      }
     }
   })
 }

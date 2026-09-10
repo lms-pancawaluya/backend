@@ -16,7 +16,7 @@ const generateOtp = () => {
 // REGISTER — Daftarkan user baru + kirim OTP
 // ================================================
 const register = async (data) => {
-  const { nama, email, password, gelar, nip, sekolah, kotaKab, kecamatan } = data
+  const { nama, email, password, gelar, nip, schoolId, sekolah, kotaKab, kecamatan } = data
 
   // 1. Cek apakah email sudah terdaftar
   const emailSudahAda = await prisma.user.findUnique({
@@ -36,14 +36,32 @@ const register = async (data) => {
     }
   }
 
-  // 3. Hash password
+  // 3. Jika schoolId dikirim, ambil detail MasterSekolah
+  let finalSchoolId = schoolId || null
+  let finalSekolah = sekolah || null
+  let finalKotaKab = kotaKab || null
+  let finalKecamatan = kecamatan || null
+
+  if (schoolId) {
+    const masterSekolah = await prisma.masterSekolah.findUnique({
+      where: { id: schoolId }
+    })
+    if (masterSekolah) {
+      finalSchoolId = masterSekolah.id
+      finalSekolah = masterSekolah.nama
+      finalKotaKab = masterSekolah.kotaKab
+      finalKecamatan = masterSekolah.kecamatan
+    }
+  }
+
+  // 4. Hash password
   const hashedPassword = await bcrypt.hash(password, 10)
 
-  // 4. Generate OTP & waktu expired (10 menit)
+  // 5. Generate OTP & waktu expired (10 menit)
   const otpCode = generateOtp()
   const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
-  // 5. Simpan user baru dengan isVerified: false
+  // 6. Simpan user baru dengan isVerified: false
   const userBaru = await prisma.user.create({
     data: {
       nama,
@@ -52,9 +70,10 @@ const register = async (data) => {
       role: 'guru',
       gelar: gelar || null,
       nip: nip || null,
-      sekolah: sekolah || null,
-      kotaKab: kotaKab || null,
-      kecamatan: kecamatan || null,
+      schoolId: finalSchoolId,
+      sekolah: finalSekolah,
+      kotaKab: finalKotaKab,
+      kecamatan: finalKecamatan,
       isVerified: false,
       otpCode,
       otpExpiresAt
@@ -66,15 +85,23 @@ const register = async (data) => {
       role: true,
       gelar: true,
       nip: true,
+      schoolId: true,
       sekolah: true,
       kotaKab: true,
       kecamatan: true,
       isVerified: true,
-      createdAt: true
+      createdAt: true,
+      school: {
+        select: {
+          id: true,
+          nama: true,
+          npsn: true
+        }
+      }
     }
   })
 
-  // 5. Kirim OTP ke email
+  // 7. Kirim OTP ke email
   await mailer.sendOtpRegister(email, otpCode)
 
   return {
@@ -89,7 +116,6 @@ const register = async (data) => {
 const verifyOtp = async (data) => {
   const { email, otpCode } = data
 
-  // 1. Cari user
   const user = await prisma.user.findUnique({
     where: { email }
   })
@@ -98,22 +124,18 @@ const verifyOtp = async (data) => {
     throw new Error('User tidak ditemukan')
   }
 
-  // 2. Cek apakah sudah verified
   if (user.isVerified) {
     throw new Error('Akun ini sudah terverifikasi sebelumnya')
   }
 
-  // 3. Cek OTP cocok
   if (user.otpCode !== otpCode) {
     throw new Error('Kode OTP yang kamu masukkan salah')
   }
 
-  // 4. Cek OTP expired
   if (!user.otpExpiresAt || user.otpExpiresAt < new Date()) {
     throw new Error('Kode OTP sudah kadaluwarsa. Silakan minta kode baru.')
   }
 
-  // 5. Update isVerified → true, hapus OTP
   await prisma.user.update({
     where: { email },
     data: {
@@ -142,7 +164,6 @@ const resendOtp = async (email) => {
     throw new Error('Akun ini sudah terverifikasi')
   }
 
-  // Generate OTP baru
   const otpCode = generateOtp()
   const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000)
 
@@ -161,15 +182,23 @@ const resendOtp = async (email) => {
 // ================================================
 const login = async (data) => {
   const { identifier, password } = data
-  // identifier = email atau NIP
 
-  // 1. Cari user berdasarkan email atau NIP
+  // 1. Cari user berdasarkan email atau NIP beserta relasi sekolahnya
   const user = await prisma.user.findFirst({
     where: {
       OR: [
         { email: identifier },
         { nip: identifier }
       ]
+    },
+    include: {
+      school: {
+        select: {
+          id: true,
+          nama: true,
+          npsn: true
+        }
+      }
     }
   })
 
@@ -177,30 +206,29 @@ const login = async (data) => {
     throw new Error('Email/NIP atau password salah')
   }
 
-  // 2. Cek apakah akun sudah diverifikasi
   if (!user.isVerified) {
     throw new Error('Akun kamu belum diverifikasi. Silakan cek email untuk kode OTP.')
   }
 
-  // 3. Verifikasi password
   const passwordCocok = await bcrypt.compare(password, user.password)
   if (!passwordCocok) {
     throw new Error('Email/NIP atau password salah')
   }
 
-  // 4. Generate JWT token
+  // 4. Generate JWT token (Memasukkan schoolId ke payload)
   const token = jwt.sign(
     {
       id: user.id,
       email: user.email,
       role: user.role,
+      schoolId: user.schoolId,
       sekolah: user.sekolah
     },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   )
 
-  // 5. Return token + data user (tanpa password!)
+  // 5. Return token + data user lengkap
   return {
     token,
     user: {
@@ -210,7 +238,9 @@ const login = async (data) => {
       role: user.role,
       gelar: user.gelar,
       nip: user.nip,
+      schoolId: user.schoolId,
       sekolah: user.sekolah,
+      school: user.school,
       isVerified: user.isVerified
     }
   }
@@ -263,7 +293,6 @@ const verifyResetOtp = async (data) => {
     throw new Error('Kode OTP sudah kadaluwarsa')
   }
 
-  // Hapus OTP setelah verifikasi berhasil
   await prisma.user.update({
     where: { email },
     data: {

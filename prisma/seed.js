@@ -43,14 +43,16 @@ const daftarGuru = [
 ]
 
 async function main() {
-  console.log('🧹 Menghapus data dummy lama...')
+  console.log('🧹 Menghapus data dummy user lama...')
 
-  // 1. Hapus data dummy lama (yang akhiran emailnya @example.com atau @dummy.com)
+  // 1. Hapus data dummy lama
   const deleted = await prisma.user.deleteMany({
     where: {
       OR: [
         { email: { endsWith: '@example.com' } },
-        { email: { endsWith: '@dummy.com' } }
+        { email: { endsWith: '@dummy.com' } },
+        { email: 'admin@dummy.com' },
+        { email: 'pengajar@dummy.com' }
       ]
     }
   })
@@ -61,7 +63,27 @@ async function main() {
   const passwordHash = await bcrypt.hash('Password123!', 10)
   const timestampUnik = Date.now().toString().slice(-6)
 
-  // 2. Buat 1 Akun Role Pengajar Baru
+  // 2. Buat 1 Akun Role ADMIN
+  const admin = await prisma.user.create({
+    data: {
+      nama: 'Super Admin LMS',
+      email: 'admin@dummy.com',
+      password: passwordHash,
+      role: 'admin',
+      gelar: 'M.Kom.',
+      nip: `19800101200501${timestampUnik}`,
+      sekolah: 'Dinas Pendidikan Provinsi Jawa Barat',
+      schoolId: null, // Admin bertindak secara GLOBAL
+      kotaKab: 'Kota Bandung',
+      kecamatan: 'Sumur Bandung',
+      noHp: '081111111111',
+      isVerified: true,
+      status: 'aktif'
+    }
+  })
+  console.log(`✅ Account Admin dibuat: ${admin.email}`)
+
+  // 3. Buat 1 Akun Role PENGAJAR
   const pengajar = await prisma.user.create({
     data: {
       nama: 'Dr. Ahmad Pengajar, M.Pd.',
@@ -70,9 +92,10 @@ async function main() {
       role: 'pengajar',
       gelar: 'M.Pd.',
       nip: `19850101201001${timestampUnik}`,
-      sekolah: 'Dinas Pendidikan Jawa Barat',
+      sekolah: 'SMAN 1 Bandung', // Contoh Sekolah Pengajar
+      schoolId: '20206151', // ID / NPSN Sekolah Scope
       kotaKab: 'Kota Bandung',
-      kecamatan: 'Sumur Bandung',
+      kecamatan: 'Coblong',
       noHp: '081234567890',
       isVerified: true,
       status: 'aktif'
@@ -80,10 +103,9 @@ async function main() {
   })
   console.log(`✅ Account Pengajar dibuat: ${pengajar.email}`)
 
-  // 3. Buat 20 Data Dummy Guru SMA Baru
+  // 4. Buat 20 Data Dummy GURU SMA
   for (let i = 0; i < daftarGuru.length; i++) {
     const guru = daftarGuru[i]
-    // Menentukan lokasi/sekolah (setiap 5 guru beda sekolah/wilayah)
     const wilayahIndex = Math.floor(i / 5)
     const wilayah = dataSekolahWilayah[wilayahIndex]
     

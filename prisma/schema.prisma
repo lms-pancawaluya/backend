@@ -86,6 +86,11 @@ model User {
   status       UserStatus    @default(aktif) @map("status")
   nip          String?       @unique @map("nip")
   sekolah      String?       @map("sekolah")
+  
+  // Relasi ke MasterSekolah untuk School-Scope Otorisasi
+  schoolId     String?        @map("school_id")
+  school       MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
   kotaKab      String?       @map("kota/kab")
   kecamatan    String?       @map("kecamatan")
   noHp         String?       @map("no_hp")
@@ -97,19 +102,21 @@ model User {
   createdAt    DateTime      @default(now()) @map("created_at")
 
   // Relasi
-  courseProgress user_course_progress[]
-  progress       user_progress[]
-  answers        user_answers[]
+  courseProgress   user_course_progress[]
+  progress         user_progress[]
+  answers          user_answers[]
   miniQuizAttempts MiniQuizAttempt[]
-  feedbacks      Feedback[]
-  comments       Comment[]
-  rtlSubmissions RtlSubmission[]
-  reviewedRtls   RtlSubmission[]        @relation("TrainerRtlReviewer")
-  tickets        Ticket[]               @relation("UserTickets")
-  ticketReplies  TicketReply[]          @relation("UserTicketReplies")
-  notifications  Notification[]
-  certificates   Certificate[]
+  feedbacks        Feedback[]
+  comments         Comment[]
+  rtlSubmissions   RtlSubmission[]
+  reviewedRtls     RtlSubmission[]        @relation("TrainerRtlReviewer")
+  tickets          Ticket[]               @relation("UserTickets")
+  ticketReplies    TicketReply[]          @relation("UserTicketReplies")
+  notifications    Notification[]
+  certificates     Certificate[]
+  createdCourses   Course[]               @relation("UserCreatedCourses")
 
+  @@index([schoolId])
   @@map("users")
 }
 
@@ -121,18 +128,30 @@ model Course {
   mode           CourseMode  @default(online)
   hasCertificate Boolean     @default(true) @map("has_certificate")
   
+  // Scope & Ownership
+  // Jika schoolId = null -> GLOBAL (Dapat diakses oleh semua sekolah & guru)
+  // Jika schoolId terisi -> SCOPE SEKOLAH (Khusus untuk pengajar & guru di sekolah terkait)
+  schoolId       String?        @map("school_id")
+  school         MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  
+  createdBy      String?        @map("created_by") // User ID pembuat course
+  creator        User?          @relation("UserCreatedCourses", fields: [createdBy], references: [id], onDelete: SetNull)
+
   // Detail khusus jika mode Offline
   lokasi         String?
   tanggalMulai   DateTime?   @map("tanggal_mulai")
   tanggalSelesai DateTime?   @map("tanggal_selesai")
 
   createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
 
   // Relasi
   modules        Module[]
   courseProgress user_course_progress[]
   certificates   Certificate[]
 
+  @@index([schoolId])
+  @@index([createdBy])
   @@map("courses")
 }
 
@@ -277,10 +296,6 @@ model user_answers {
   @@map("user_answers")
 }
 
-// ==========================================
-// TABEL FEEDBACK
-// ==========================================
-
 model Feedback {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
@@ -297,10 +312,6 @@ model Feedback {
   @@index([moduleId])
   @@map("feedbacks")
 }
-
-// ==========================================
-// FITUR KOMENTAR
-// ==========================================
 
 model Comment {
   id        String   @id @default(uuid())
@@ -321,10 +332,6 @@ model Comment {
   @@index([parentId])
   @@map("comments")
 }
-
-// ==========================================
-// FITUR UPLOAD RTL & SERTIFIKAT
-// ==========================================
 
 model RtlSubmission {
   id             String    @id @default(uuid())
@@ -352,7 +359,7 @@ model RtlSubmission {
 model Certificate {
   id              String   @id @default(uuid())
   userId          String   @map("user_id")
-  courseId        String   @map("course_id") // Sertifikat terikat pada level Course
+  courseId        String   @map("course_id")
   nomorSertifikat String   @unique @map("nomor_sertifikat")
   fileUrl         String   @map("file_url") @db.Text
   issuedAt        DateTime @default(now()) @map("issued_at")
@@ -365,10 +372,6 @@ model Certificate {
   @@index([courseId])
   @@map("certificates")
 }
-
-// ==========================================
-// MINI QUIZ
-// ==========================================
 
 model MiniQuiz {
   id               String   @id @default(uuid())
@@ -434,10 +437,6 @@ model MiniQuizAttempt {
   @@map("mini_quiz_attempts")
 }
 
-// ==========================================
-// FITUR HELPDESK / TICKETING
-// ==========================================
-
 model Ticket {
   id           String       @id @default(uuid())
   ticketNumber String       @unique @map("ticket_number")
@@ -471,10 +470,6 @@ model TicketReply {
   @@map("ticket_replies")
 }
 
-// ==========================================
-// FITUR NOTIFIKASI
-// ==========================================
-
 model Notification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
@@ -491,10 +486,6 @@ model Notification {
   @@map("notifications")
 }
 
-// ==========================================
-// MASTER DATA (DATASET SEKOLAH & GURU)
-// ==========================================
-
 model MasterSekolah {
   id            String   @id @default(uuid())
   npsn          String?  @unique @map("npsn")
@@ -506,6 +497,10 @@ model MasterSekolah {
   status        String?  @map("status")
   akreditasi    String?  @map("akreditasi")
   createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relasi ke User dan Course
+  users         User[]
+  courses       Course[]
 
   @@map("master_sekolah")
 }

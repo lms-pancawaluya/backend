@@ -8,14 +8,12 @@ const roleMiddleware = require('../../middlewares/role.middleware');
 
 // ==========================================
 // ROUTES UNTUK SEMUA USER TERAUTENTIKASI
-// (Guru/Siswa, Pengajar, dan Admin dapat melihat)
 // ==========================================
 router.get('/', authMiddleware, coursesController.getAll);
 router.get('/:id', authMiddleware, coursesController.getById);
 
 // ==========================================
 // ROUTES KHUSUS PENGELOLA (Admin & Pengajar)
-// (Guru TIDAK memilik hak akses untuk CUD)
 // ==========================================
 router.post(
   '/',
@@ -34,7 +32,7 @@ router.put(
 router.delete(
   '/:id',
   authMiddleware,
-  roleMiddleware('admin'), // Hapus course disarankan hanya untuk Admin
+  roleMiddleware('admin', 'pengajar'),
   coursesController.delete
 );
 

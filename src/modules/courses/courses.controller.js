@@ -3,8 +3,8 @@ const coursesService = require('./courses.service');
 class CoursesController {
   async getAll(req, res, next) {
     try {
-      const userId = req.user?.id || null;
-      const courses = await coursesService.getAllCourses(userId, req.query);
+      const user = req.user || null;
+      const courses = await coursesService.getAllCourses(user, req.query);
 
       res.status(200).json({
         success: true,
@@ -18,8 +18,8 @@ class CoursesController {
 
   async getById(req, res, next) {
     try {
-      const userId = req.user?.id || null;
-      const course = await coursesService.getCourseById(req.params.id, userId);
+      const user = req.user || null;
+      const course = await coursesService.getCourseById(req.params.id, user);
 
       res.status(200).json({
         success: true,
@@ -33,7 +33,7 @@ class CoursesController {
 
   async create(req, res, next) {
     try {
-      const newCourse = await coursesService.createCourse(req.body);
+      const newCourse = await coursesService.createCourse(req.body, req.user);
 
       res.status(201).json({
         success: true,
@@ -49,7 +49,8 @@ class CoursesController {
     try {
       const updatedCourse = await coursesService.updateCourse(
         req.params.id,
-        req.body
+        req.body,
+        req.user
       );
 
       res.status(200).json({
@@ -64,7 +65,7 @@ class CoursesController {
 
   async delete(req, res, next) {
     try {
-      await coursesService.deleteCourse(req.params.id);
+      await coursesService.deleteCourse(req.params.id, req.user);
 
       res.status(200).json({
         success: true,

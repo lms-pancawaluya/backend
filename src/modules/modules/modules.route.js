@@ -12,7 +12,7 @@ const evaluationsRoute = require('../evaluations/evaluations.route')
 router.use('/:moduleId/contents', contentsRoute)
 router.use('/:moduleId/evaluations', evaluationsRoute)
 
-// PUBLIC / GENERAL ROUTES
+// PUBLIC / GENERAL ROUTES (Harus Login)
 router.get('/', authMiddleware, modulesController.getAllModules)
 router.get('/:id', authMiddleware, modulesController.getModuleById)
 
@@ -34,7 +34,7 @@ router.put(
 router.delete(
   '/:id',
   authMiddleware,
-  roleMiddleware('admin'), // Hapus modul sebaiknya tetap Admin
+  roleMiddleware('admin', 'pengajar'),
   modulesController.deleteModule
 )
 

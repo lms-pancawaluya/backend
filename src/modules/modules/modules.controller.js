@@ -4,7 +4,7 @@ const modulesService = require('./modules.service')
 
 const getAllModules = async (req, res) => {
   try {
-    const modules = await modulesService.getAllModules(req.query)
+    const modules = await modulesService.getAllModules(req.query, req.user)
 
     return res.status(200).json({
       sukses: true,
@@ -22,14 +22,14 @@ const getAllModules = async (req, res) => {
 const getModuleById = async (req, res) => {
   try {
     const { id } = req.params
-    const module = await modulesService.getModuleById(id)
+    const module = await modulesService.getModuleById(id, req.user)
 
     return res.status(200).json({
       sukses: true,
       data: module
     })
   } catch (error) {
-    return res.status(404).json({
+    return res.status(error.statusCode || 404).json({
       sukses: false,
       pesan: error.message
     })
@@ -40,10 +40,10 @@ const createModule = async (req, res) => {
   try {
     const { courseId, judul, deskripsi, aspekPancawaluya, urutan } = req.body
 
-    if (!judul || !deskripsi || !urutan) {
+    if (!courseId || !judul || !deskripsi || !urutan) {
       return res.status(400).json({
         sukses: false,
-        pesan: 'Judul, deskripsi, dan urutan wajib diisi'
+        pesan: 'CourseId, judul, deskripsi, dan urutan wajib diisi'
       })
     }
 
@@ -63,7 +63,7 @@ const createModule = async (req, res) => {
       deskripsi,
       aspekPancawaluya,
       urutan: Number(urutan)
-    })
+    }, req.user)
 
     return res.status(201).json({
       sukses: true,
@@ -71,7 +71,7 @@ const createModule = async (req, res) => {
       data: moduleBaru
     })
   } catch (error) {
-    return res.status(400).json({
+    return res.status(error.statusCode || 400).json({
       sukses: false,
       pesan: error.message
     })
@@ -99,7 +99,7 @@ const updateModule = async (req, res) => {
       deskripsi,
       aspekPancawaluya,
       urutan: urutan ? Number(urutan) : undefined
-    })
+    }, req.user)
 
     return res.status(200).json({
       sukses: true,
@@ -107,7 +107,7 @@ const updateModule = async (req, res) => {
       data: moduleUpdated
     })
   } catch (error) {
-    return res.status(400).json({
+    return res.status(error.statusCode || 400).json({
       sukses: false,
       pesan: error.message
     })
@@ -117,14 +117,14 @@ const updateModule = async (req, res) => {
 const deleteModule = async (req, res) => {
   try {
     const { id } = req.params
-    const hasil = await modulesService.deleteModule(id)
+    const hasil = await modulesService.deleteModule(id, req.user)
 
     return res.status(200).json({
       sukses: true,
       pesan: hasil.pesan
     })
   } catch (error) {
-    return res.status(404).json({
+    return res.status(error.statusCode || 404).json({
       sukses: false,
       pesan: error.message
     })

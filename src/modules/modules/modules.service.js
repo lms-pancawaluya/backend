@@ -3,7 +3,41 @@
 const prisma = require('../../config/database')
 const notificationService = require('../notifications/notifications.service')
 
-const getAllModules = async (query = {}) => {
+// Helper untuk membuat error dengan status code HTTP
+const createError = (message, statusCode) => {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  return error
+}
+
+// Helper otorisasi akses Course induk
+const validateCourseAccess = async (courseId, user) => {
+  const course = await prisma.course.findUnique({
+    where: { id: courseId }
+  })
+
+  if (!course) {
+    throw createError('Course tidak ditemukan', 404)
+  }
+
+  // Admin bebas mengelola semua modul
+  if (user.role === 'admin') return course
+
+  // Pengajar hanya bisa mengelola jika dia pembuatnya atau berada di sekolah yang sama
+  const isOwner = course.createdBy === user.id
+  const isSameSchool = course.schoolId && course.schoolId === user.schoolId
+
+  if (!isOwner && !isSameSchool) {
+    throw createError('Kamu tidak memiliki akses untuk mengelola modul pada Course ini', 403)
+  }
+
+  return course
+}
+
+// ================================================
+// GET ALL MODULES
+// ================================================
+const getAllModules = async (query = {}, currentUser = null) => {
   const { courseId } = query
   const where = {}
 
@@ -21,6 +55,13 @@ const getAllModules = async (query = {}) => {
       aspekPancawaluya: true,
       urutan: true,
       createdAt: true,
+      course: {
+        select: {
+          id: true,
+          judul: true,
+          schoolId: true
+        }
+      },
       _count: {
         select: {
           contents: true,
@@ -34,17 +75,19 @@ const getAllModules = async (query = {}) => {
   return modules
 }
 
-const getModuleById = async (id) => {
+// ================================================
+// GET MODULE BY ID
+// ================================================
+const getModuleById = async (id, currentUser = null) => {
   const module = await prisma.module.findUnique({
     where: { id },
-    select: {
-      id: true,
-      courseId: true,
-      judul: true,
-      deskripsi: true,
-      aspekPancawaluya: true,
-      urutan: true,
-      createdAt: true,
+    include: {
+      course: {
+        select: {
+          id: true,
+          schoolId: true
+        }
+      },
       contents: {
         select: {
           id: true,
@@ -79,29 +122,44 @@ const getModuleById = async (id) => {
   })
 
   if (!module) {
-    throw new Error('Modul tidak ditemukan')
+    throw createError('Modul tidak ditemukan', 404)
+  }
+
+  // Validasi Hak Akses Baca untuk Scope Sekolah
+  if (module.course && module.course.schoolId && currentUser && currentUser.role !== 'admin') {
+    if (module.course.schoolId !== currentUser.schoolId) {
+      throw createError('Kamu tidak memiliki akses ke modul sekolah ini', 403)
+    }
   }
 
   return module
 }
 
-const createModule = async (data) => {
+// ================================================
+// CREATE MODULE
+// ================================================
+const createModule = async (data, currentUser) => {
   const { courseId, judul, deskripsi, aspekPancawaluya, urutan } = data
 
-  // Pengecekan urutan unik terbatas per Course
-  if (courseId) {
-    const urutanSudahAda = await prisma.module.findFirst({
-      where: { courseId, urutan }
-    })
+  if (!courseId) {
+    throw createError('courseId wajib disertakan', 400)
+  }
 
-    if (urutanSudahAda) {
-      throw new Error(`Urutan ${urutan} sudah dipakai modul lain dalam course ini`)
-    }
+  // Validasi Hak Akses Pengajar/Admin ke Course Induk
+  const parentCourse = await validateCourseAccess(courseId, currentUser)
+
+  // Pengecekan urutan unik terbatas per Course
+  const urutanSudahAda = await prisma.module.findFirst({
+    where: { courseId, urutan }
+  })
+
+  if (urutanSudahAda) {
+    throw createError(`Urutan ${urutan} sudah dipakai modul lain dalam course ini`, 400)
   }
 
   const moduleBaru = await prisma.module.create({
     data: {
-      courseId: courseId || null,
+      courseId,
       judul,
       deskripsi,
       aspekPancawaluya: aspekPancawaluya || 'umum',
@@ -109,10 +167,17 @@ const createModule = async (data) => {
     }
   })
 
-  // Broadcast Notifikasi ke Guru
+  // Broadcast Notifikasi Ter-target ke Guru
   try {
+    const teacherWhere = { role: 'guru' }
+    
+    // Jika Course khusus sekolah -> HANYA kirim ke Guru dari sekolah yang sama
+    if (parentCourse.schoolId) {
+      teacherWhere.schoolId = parentCourse.schoolId
+    }
+
     const teachers = await prisma.user.findMany({
-      where: { role: 'guru' },
+      where: teacherWhere,
       select: { id: true }
     })
 
@@ -120,7 +185,7 @@ const createModule = async (data) => {
       const notificationsData = teachers.map((teacher) => ({
         userId: teacher.id,
         title: 'Modul Baru',
-        message: `Modul baru "${moduleBaru.judul}" telah tersedia. Yuk pelajari sekarang!`,
+        message: `Modul baru "${moduleBaru.judul}" telah tersedia di ${parentCourse.judul}. Yuk pelajari sekarang!`,
         type: 'NEW_MODULE',
         linkUrl: `/modules/${moduleBaru.id}`
       }))
@@ -134,7 +199,10 @@ const createModule = async (data) => {
   return moduleBaru
 }
 
-const updateModule = async (id, data) => {
+// ================================================
+// UPDATE MODULE
+// ================================================
+const updateModule = async (id, data, currentUser) => {
   const { courseId, judul, deskripsi, aspekPancawaluya, urutan } = data
 
   const moduleAda = await prisma.module.findUnique({
@@ -142,10 +210,18 @@ const updateModule = async (id, data) => {
   })
 
   if (!moduleAda) {
-    throw new Error('Modul tidak ditemukan')
+    throw createError('Modul tidak ditemukan', 404)
   }
 
+  // Validasi Hak Akses ke Course Asal
+  await validateCourseAccess(moduleAda.courseId, currentUser)
+
   const targetCourseId = courseId !== undefined ? courseId : moduleAda.courseId
+
+  // Jika mencoba memindahkan modul ke Course lain, validasi akses ke Course tujuan
+  if (courseId && courseId !== moduleAda.courseId) {
+    await validateCourseAccess(courseId, currentUser)
+  }
 
   if (urutan && (urutan !== moduleAda.urutan || targetCourseId !== moduleAda.courseId)) {
     if (targetCourseId) {
@@ -158,7 +234,7 @@ const updateModule = async (id, data) => {
       })
 
       if (urutanSudahAda) {
-        throw new Error(`Urutan ${urutan} sudah dipakai modul lain dalam course ini`)
+        throw createError(`Urutan ${urutan} sudah dipakai modul lain dalam course ini`, 400)
       }
     }
   }
@@ -177,14 +253,20 @@ const updateModule = async (id, data) => {
   return moduleUpdated
 }
 
-const deleteModule = async (id) => {
+// ================================================
+// DELETE MODULE
+// ================================================
+const deleteModule = async (id, currentUser) => {
   const moduleAda = await prisma.module.findUnique({
     where: { id }
   })
 
   if (!moduleAda) {
-    throw new Error('Modul tidak ditemukan')
+    throw createError('Modul tidak ditemukan', 404)
   }
+
+  // Validasi Hak Akses Pengelolaan
+  await validateCourseAccess(moduleAda.courseId, currentUser)
 
   await prisma.module.delete({
     where: { id }

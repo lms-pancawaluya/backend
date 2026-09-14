@@ -12,6 +12,9 @@ const createError = (message, statusCode) => {
 
 // Helper otorisasi akses Course induk
 const validateCourseAccess = async (courseId, user) => {
+  // 🟢 PERBAIKAN 1: Jika modul tidak terikat ke course manapun (null/undefined), izinkan pengelola
+  if (!courseId) return null
+
   const course = await prisma.course.findUnique({
     where: { id: courseId }
   })
@@ -172,7 +175,7 @@ const createModule = async (data, currentUser) => {
     const teacherWhere = { role: 'guru' }
     
     // Jika Course khusus sekolah -> HANYA kirim ke Guru dari sekolah yang sama
-    if (parentCourse.schoolId) {
+    if (parentCourse && parentCourse.schoolId) {
       teacherWhere.schoolId = parentCourse.schoolId
     }
 
@@ -185,7 +188,7 @@ const createModule = async (data, currentUser) => {
       const notificationsData = teachers.map((teacher) => ({
         userId: teacher.id,
         title: 'Modul Baru',
-        message: `Modul baru "${moduleBaru.judul}" telah tersedia di ${parentCourse.judul}. Yuk pelajari sekarang!`,
+        message: `Modul baru "${moduleBaru.judul}" telah tersedia${parentCourse ? ` di ${parentCourse.judul}` : ''}. Yuk pelajari sekarang!`,
         type: 'NEW_MODULE',
         linkUrl: `/modules/${moduleBaru.id}`
       }))
@@ -213,8 +216,10 @@ const updateModule = async (id, data, currentUser) => {
     throw createError('Modul tidak ditemukan', 404)
   }
 
-  // Validasi Hak Akses ke Course Asal
-  await validateCourseAccess(moduleAda.courseId, currentUser)
+  // 🟢 PERBAIKAN 2: Validasi hanya jika modul asal punya courseId
+  if (moduleAda.courseId) {
+    await validateCourseAccess(moduleAda.courseId, currentUser)
+  }
 
   const targetCourseId = courseId !== undefined ? courseId : moduleAda.courseId
 
@@ -265,8 +270,10 @@ const deleteModule = async (id, currentUser) => {
     throw createError('Modul tidak ditemukan', 404)
   }
 
-  // Validasi Hak Akses Pengelolaan
-  await validateCourseAccess(moduleAda.courseId, currentUser)
+  // 🟢 PERBAIKAN 3: Validasi hanya jika modul punya courseId
+  if (moduleAda.courseId) {
+    await validateCourseAccess(moduleAda.courseId, currentUser)
+  }
 
   await prisma.module.delete({
     where: { id }

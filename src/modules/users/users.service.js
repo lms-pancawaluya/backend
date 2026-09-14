@@ -372,7 +372,7 @@ const updatePassword = async (id, passwordLama, passwordBaru) => {
   await prisma.user.update({
     where: { id },
     data: { password: hashedPassword }
-  })
+  }) 
 }
 
 // ================================================

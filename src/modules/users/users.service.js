@@ -133,7 +133,7 @@ const getUserById = async (id) => {
           nama: true,
           npsn: true,
           bentuk: true,
-          statusSekolah: true
+          status: true
         }
       },
       progress: {

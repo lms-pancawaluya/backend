@@ -30,6 +30,7 @@ enum AspekPancawaluya {
 enum ContentType {
   teks
   video
+  pdf
 }
 
 enum QuestionType {

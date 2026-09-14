@@ -41,12 +41,12 @@ const createContent = async (req, res) => {
       })
     }
 
-    // Validasi tipe harus teks atau video
-    const tipeValid = ['teks', 'video']
+    // Validasi tipe harus teks, video, atau pdf
+    const tipeValid = ['teks', 'video', 'pdf']
     if (!tipeValid.includes(tipe)) {
       return res.status(400).json({
         sukses: false,
-        pesan: 'Tipe konten harus "teks" atau "video"'
+        pesan: 'Tipe konten harus "teks", "video", atau "pdf"'
       })
     }
 
@@ -56,6 +56,17 @@ const createContent = async (req, res) => {
         sukses: false,
         pesan: 'Konten video harus berupa URL YouTube yang valid'
       })
+    }
+
+    // Validasi kalau tipe pdf, konten harus berupa URL valid
+    if (tipe === 'pdf') {
+      const isPdfUrl = konten.toLowerCase().includes('.pdf') || konten.toLowerCase().includes('pdf') || konten.startsWith('http')
+      if (!isPdfUrl) {
+        return res.status(400).json({
+          sukses: false,
+          pesan: 'Konten PDF harus berupa URL file PDF atau link berkas yang valid'
+        })
+      }
     }
 
     const contentBaru = await contentsService.createContent(moduleId, {
@@ -89,11 +100,11 @@ const updateContent = async (req, res) => {
 
     // Validasi tipe kalau dikirim
     if (tipe) {
-      const tipeValid = ['teks', 'video']
+      const tipeValid = ['teks', 'video', 'pdf']
       if (!tipeValid.includes(tipe)) {
         return res.status(400).json({
           sukses: false,
-          pesan: 'Tipe konten harus "teks" atau "video"'
+          pesan: 'Tipe konten harus "teks", "video", atau "pdf"'
         })
       }
     }
@@ -104,6 +115,17 @@ const updateContent = async (req, res) => {
         return res.status(400).json({
           sukses: false,
           pesan: 'Konten video harus berupa URL YouTube yang valid'
+        })
+      }
+    }
+
+    // Validasi URL PDF kalau tipe pdf
+    if (tipe === 'pdf' && konten) {
+      const isPdfUrl = konten.toLowerCase().includes('.pdf') || konten.toLowerCase().includes('pdf') || konten.startsWith('http')
+      if (!isPdfUrl) {
+        return res.status(400).json({
+          sukses: false,
+          pesan: 'Konten PDF harus berupa URL file PDF atau link berkas yang valid'
         })
       }
     }

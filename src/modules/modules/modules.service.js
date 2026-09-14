@@ -12,7 +12,7 @@ const createError = (message, statusCode) => {
 
 // Helper otorisasi akses Course induk
 const validateCourseAccess = async (courseId, user) => {
-  // 🟢 PERBAIKAN 1: Jika modul tidak terikat ke course manapun (null/undefined), izinkan pengelola
+  // 🟢 Jika modul tidak terikat ke course manapun (null/undefined), izinkan pengelola
   if (!courseId) return null
 
   const course = await prisma.course.findUnique({

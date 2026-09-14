@@ -41,12 +41,12 @@ const createContent = async (req, res) => {
       })
     }
 
-    // Validasi tipe harus teks, video, atau pdf
-    const tipeValid = ['teks', 'video', 'pdf']
+    // Validasi tipe harus teks, video, pdf, atau link
+    const tipeValid = ['teks', 'video', 'pdf', 'link']
     if (!tipeValid.includes(tipe)) {
       return res.status(400).json({
         sukses: false,
-        pesan: 'Tipe konten harus "teks", "video", atau "pdf"'
+        pesan: 'Tipe konten harus "teks", "video", "pdf", atau "link"'
       })
     }
 
@@ -67,6 +67,14 @@ const createContent = async (req, res) => {
           pesan: 'Konten PDF harus berupa URL file PDF atau link berkas yang valid'
         })
       }
+    }
+
+    // Validasi kalau tipe link, konten harus diawali http/https
+    if (tipe === 'link' && !konten.startsWith('http://') && !konten.startsWith('https://')) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Konten link harus berupa URL valid (diawali http:// atau https://)'
+      })
     }
 
     const contentBaru = await contentsService.createContent(moduleId, {
@@ -100,11 +108,11 @@ const updateContent = async (req, res) => {
 
     // Validasi tipe kalau dikirim
     if (tipe) {
-      const tipeValid = ['teks', 'video', 'pdf']
+      const tipeValid = ['teks', 'video', 'pdf', 'link']
       if (!tipeValid.includes(tipe)) {
         return res.status(400).json({
           sukses: false,
-          pesan: 'Tipe konten harus "teks", "video", atau "pdf"'
+          pesan: 'Tipe konten harus "teks", "video", "pdf", atau "link"'
         })
       }
     }
@@ -128,6 +136,14 @@ const updateContent = async (req, res) => {
           pesan: 'Konten PDF harus berupa URL file PDF atau link berkas yang valid'
         })
       }
+    }
+
+    // Validasi URL kalau tipe link
+    if (tipe === 'link' && konten && !konten.startsWith('http://') && !konten.startsWith('https://')) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Konten link harus berupa URL valid (diawali http:// atau https://)'
+      })
     }
 
     const contentUpdated = await contentsService.updateContent(id, {

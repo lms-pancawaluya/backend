@@ -64,7 +64,36 @@ const uploadRtl = async (req, res) => {
   }
 }
 
+// ================================================
+// UPLOAD PDF MODUL LMS (CLOUDINARY)
+// ================================================
+const uploadPdfModul = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'File PDF modul wajib diunggah'
+      })
+    }
+
+    const pdfUrl = await uploadService.uploadPdfModul(req.file)
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: 'File PDF modul berhasil diunggah ke Cloudinary',
+      data: { url: pdfUrl }
+    })
+
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   uploadFotoProfil,
-  uploadRtl
+  uploadRtl,
+  uploadPdfModul
 }

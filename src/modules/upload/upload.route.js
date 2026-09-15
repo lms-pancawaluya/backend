@@ -11,7 +11,7 @@ const fileFilter = (req, file, cb) => {
     'image/jpeg',
     'image/png',
     'image/webp',
-    'application/pdf' // Ditambahkan untuk Dokumen RTL
+    'application/pdf' // Diizinkan untuk Dokumen RTL & Modul LMS
   ]
 
   if (allowedMimes.includes(file.mimetype)) {
@@ -25,7 +25,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024 // Max 10MB (PDF RTL biasanya butuh limit lebih besar dari foto)
+    fileSize: 10 * 1024 * 1024 // Max 10MB
   }
 })
 
@@ -41,6 +41,13 @@ router.post('/rtl',
   authMiddleware,
   upload.single('file'),
   uploadController.uploadRtl
+)
+
+// POST upload file PDF Modul LMS (Cloudinary)
+router.post('/pdf',
+  authMiddleware,
+  upload.single('file'),
+  uploadController.uploadPdfModul
 )
 
 module.exports = router

@@ -106,6 +106,7 @@ model User {
   // Relasi
   courseProgress   user_course_progress[]
   progress         user_progress[]
+  contentProgress  user_content_progress[]
   answers          user_answers[]
   miniQuizAttempts MiniQuizAttempt[]
   feedbacks        Feedback[]
@@ -191,6 +192,7 @@ model Content {
   // Relasi
   module      Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   miniQuizzes MiniQuiz[]
+  contentProgress user_content_progress[]
 
   @@index([moduleId])
   @@map("contents")
@@ -278,6 +280,25 @@ model user_progress {
   @@index([userId])
   @@index([moduleId])
   @@map("user_progress")
+}
+
+model user_content_progress {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  contentId       String    @map("content_id")
+  isCompleted     Boolean   @default(false) @map("is_completed")
+  progressPercent Int       @default(0) @map("progress_percent")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  // Relasi
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contentId])
+  @@index([userId])
+  @@index([contentId])
+  @@map("user_content_progress")
 }
 
 model user_answers {

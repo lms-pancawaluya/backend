@@ -244,7 +244,13 @@ Router evaluasi juga dipasang secara nested pada `/api/modules/:moduleId/evaluat
   *Deskripsi:* Menandai modul selesai untuk pengguna saat ini.
 - `GET /api/progress/:moduleId` `(Terautentikasi)`
   *Deskripsi:* Mengambil progress pengguna pada satu modul.
-  *Catatan:* Response juga menyertakan `preTestCompleted`, `materialCompleted`, dan `postTestCompleted` untuk modul tersebut.
+  *Catatan:* Response juga menyertakan `preTestCompleted`, `materialCompleted`, `materialProgress`, `materialDetail`, dan `postTestCompleted` untuk modul tersebut.
+- `POST /api/progress/contents/:contentId/complete` `(Admin atau Guru)`
+  *Deskripsi:* Menandai satu learning material selesai untuk pengguna saat ini.
+  *Catatan:* Untuk material bertipe `video`, wajib sudah mencapai `progressPercent` 100% (lihat rule completion material).
+- `POST /api/progress/contents/:contentId/progress` `(Admin atau Guru)`
+  *Deskripsi:* Menyimpan progress material (mis. video watched percentage) untuk pengguna saat ini.
+  *Body:* `{ "progressPercent": 0-100 }`. Material otomatis dianggap selesai bila mencapai 100.
 
 #### Status Progress Per Tahap (Stage-level)
 
@@ -254,24 +260,42 @@ Frontend guru membutuhkan status kelulusan tiap tahap di dalam satu modul dengan
 Pre-Test → Learning Material → Post-Test
 ```
 
-Setiap item pada `GET /api/progress/` dan response `GET /api/progress/:moduleId` menyertakan tiga boolean tambahan tanpa menghapus field lama:
+Setiap item pada `GET /api/progress/` dan response `GET /api/progress/:moduleId` menyertakan field tambahan tanpa menghapus field lama:
 
 ```json
 {
   "moduleId": "…",
   "preTestCompleted": false,
   "materialCompleted": false,
-  "postTestCompleted": false
+  "postTestCompleted": false,
+  "materialProgress": { "total": 5, "completed": 3 },
+  "materialDetail": [
+    { "contentId": "…", "tipe": "video", "hasMiniQuiz": false, "isCompleted": false, "progressPercent": 40 }
+  ]
 }
 ```
 
-Definisi (semuanya diturunkan dari data **existing**, tanpa perubahan skema database):
-
 - **`preTestCompleted`** — Guru sudah **submit pre-test** (ditandai dengan adanya jawaban pada evaluasi bertipe `pre_test` di modul tersebut). Ini berarti "sudah dikerjakan", **bukan** "lulus" (pre-test memang tidak memakai passing grade). Jika modul **tidak punya pre-test**, nilainya `true` (pre-test dianggap tidak diperlukan).
-- **`materialCompleted`** — Seluruh **mini kuis** pada materi modul sudah **lulus** (`MiniQuizAttempt.isLolos`). Ini konsisten dengan aturan auto-complete yang sudah dipakai oleh modul mini kuis. Jika modul **tidak punya mini kuis**, nilainya `true` (materi dianggap tidak diperlukan).
 - **`postTestCompleted`** — Skor utama guru (`user_progress.skor`) sudah **≥ passingScore** post-test. Berarti "lulus post-test", bukan sekadar membuka. Jika modul **tidak punya post-test**, nilainya `true`.
+- **`materialCompleted`** — `true` hanya bila **seluruh** learning material pada modul sudah memenuhi aturan completion-nya. Modul tanpa material → `true`. Lihat *Completion Learning Material* di bawah.
+- **`materialProgress`** — ringkasan `{ total, completed }` jumlah material wajib selesai pada modul.
+- **`materialDetail`** — status completion per material (opsional, membantu FE menandai tiap item).
 
 Status dihitung **per guru per modul** (selalu memakai `userId` dari token), tidak pernah mengambil data guru lain.
+
+#### Completion Learning Material
+
+Material **tidak** dianggap selesai hanya karena halaman dibuka / endpoint diakses / klik. Completion berasal dari state yang tersimpan:
+
+| Tipe material | Aturan completion |
+|---|---|
+| `video` | `user_content_progress.progressPercent >= 100` (ditonton sampai selesai). Endpoint `POST /contents/:contentId/progress`. |
+| `pdf` | `user_content_progress.isCompleted = true` (ditandai via `POST /contents/:contentId/complete`). |
+| `teks` | `user_content_progress.isCompleted = true` (ditandai via `POST /contents/:contentId/complete`). |
+| `link` | `user_content_progress.isCompleted = true` (ditandai via `POST /contents/:contentId/complete`). |
+| material ber-**mini quiz** | seluruh mini-quiz pada material tsb wajib **lulus** (`MiniQuizAttempt.isLolos = true`). Bila material juga punya `user_content_progress`, keduanya wajib terpenuhi. |
+
+**Batas yang terdokumentasi (keterbatasan):** sistem belum memiliki tracking per-halaman/hitungan menit untuk `pdf`; completion `pdf`/`teks`/`link` bergantung pada penandaan eksplisit guru (`isCompleted`). Video memakai `progressPercent` sehingga FE wajib mengirim posisi tonton. Tidak ada mekanisme "interactive checkpoint" tersendiri — checkpoint diwakili oleh mini-quiz bertimestamp (`MiniQuiz.timestampSeconds`).
 
 ### Rencana Tindak Lanjut — `/api/rtl`
 

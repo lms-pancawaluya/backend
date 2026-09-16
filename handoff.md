@@ -188,3 +188,131 @@ Temuan berikut dicatat untuk pekerjaan hardening terpisah dan **tidak diubah**:
 - Tidak ada `create`/`update`/`delete` baru pada jalur ini.
 - Tidak ada migrasi, tidak ada `db push`, tidak ada reset, tidak ada seeding.
 - **Prisma schema: TIDAK ADA perubahan.**
+
+---
+---
+
+# Iterasi 2 — Material Completion Tracking (DENGAN perubahan schema, disetujui)
+
+> ⚠️ Iterasi ini **membatalkan** batasan "no schema change" dari Iterasi 1, **atas
+> persetujuan pemilik produk** setelah BE melaporkan `SCHEMA/DATA TRACKING CHANGE REQUIRED`.
+
+## 11. Latar Belakang Iterasi 2
+
+`materialCompleted` versi Iterasi 1 hanya mencerminkan mini-quiz. Material
+`teks`/`video`/`pdf`/`link` **tanpa** mini-quiz tidak punya sinyal completion
+sehingga dianggap "selesai" secara keliru. FE membutuhkan completion berbasis
+state nyata, bukan page visit.
+
+## 12. Audit Tracking Existing (Iterasi 2)
+
+| Jenis material | State completion existing | Kesimpulan |
+|---|---|---|
+| video | ❌ tidak ada (tidak ada watched seconds/percent) | Tidak bisa ditrack → butuh data baru |
+| pdf | ❌ tidak ada | Tidak bisa ditrack → butuh data baru |
+| teks | ❌ tidak ada | Tidak bisa ditrack → butuh data baru |
+| link | ❌ tidak ada | Tidak bisa ditrack → butuh data baru |
+| interactive/checkpoint | ❌ tidak ada (tipe pun tidak ada di enum) | Tidak ada mekanisme |
+| mini-quiz | ✅ `MiniQuizAttempt.isLolos` | Bisa ditrack |
+
+Bukti: pencarian `src/` untuk `watch|checkpoint|content.*progress|percentage|ditonton|dibaca|dilihat` → tidak ada. `prisma.contentProgress`/`userContentProgress` → `undefined`. Sehingga dilaporkan `SCHEMA/DATA TRACKING CHANGE REQUIRED`.
+
+## 13. Perubahan Schema (Iterasi 2)
+
+Model baru `user_content_progress` (progress material per guru per content):
+
+```prisma
+model user_content_progress {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  contentId       String    @map("content_id")
+  isCompleted     Boolean   @default(false) @map("is_completed")
+  progressPercent Int       @default(0) @map("progress_percent")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contentId])
+  @@index([userId])
+  @@index([contentId])
+  @@map("user_content_progress")
+}
+```
+
+Relasi balik ditambahkan di `User` (`contentProgress`) dan `Content` (`contentProgress`).
+
+Migration: `prisma/migrations/20260916122547_add_user_content_progress/migration.sql`
+(hanya `CREATE TABLE` + index + 2 foreign key; **tidak** menyentuh tabel existing).
+
+## 14. Material Completion Contract (Iterasi 2)
+
+Material selesai **hanya** dari state tersimpan, bukan page visit:
+
+| Tipe | Aturan |
+|---|---|
+| video | `progressPercent >= 100` |
+| pdf | `isCompleted = true` (via endpoint complete) |
+| teks | `isCompleted = true` (via endpoint complete) |
+| link | `isCompleted = true` (via endpoint complete) |
+| ber-mini-quiz | seluruh mini-quiz lulus (`isLolos`); bila ada `user_content_progress` juga, keduanya wajib |
+
+`materialCompleted = semua content pada modul memenuhi aturan` (modul tanpa content → `true`).
+
+## 15. Stage Completion Contract (final)
+
+- **preTestCompleted** — tidak ada pre-test → `true`; ada → `true` bila ada `user_answers` pada evaluasi `pre_test` (sudah submit, bukan harus lulus).
+- **materialCompleted** — tidak ada material → `true`; ada → seluruh material memenuhi aturan di §14.
+- **postTestCompleted** — tidak ada post-test → `true`; ada → `user_progress.skor >= passingScore`.
+- Semua per guru per modul.
+
+## 16. Endpoint Baru (Iterasi 2)
+
+- `POST /api/progress/contents/:contentId/complete` `(Admin atau Guru)`
+  — menandai material selesai. Video ditolak bila `progressPercent < 100`.
+- `POST /api/progress/contents/:contentId/progress` `(Admin atau Guru)`
+  — body `{ progressPercent: 0-100 }`; menyimpan progress & auto-complete bila ≥100.
+
+Response `GET /api/progress` & `GET /api/progress/:moduleId` ditambah:
+`materialProgress: { total, completed }` dan `materialDetail: [...]`.
+Field lama **tidak dihapus** (backward compatible).
+
+## 17. Edge Case (Iterasi 2)
+
+1. Modul tanpa Pre-Test → `preTestCompleted=true`, material terbuka.
+2. Modul tanpa Material → `materialCompleted=true`, post-test terbuka.
+3. Tanpa Pre-Test & Material → keduanya `true`.
+4. Modul tanpa Post-Test → `postTestCompleted=true`.
+5. Modul dengan material tanpa mekanisme completion → **kini ditangani** lewat
+   `user_content_progress` (material dianggap belum selesai sampai ditandai).
+   Tidak ada lagi false-positive.
+
+## 18. Testing (Iterasi 2)
+
+- **Unit test logika murni** (13 case): union mini-quiz + content progress, video
+  threshold, campuran material → semua **PASS**.
+- **Service-level test dengan Prisma di-mock** memuat `progress.service.js` asli
+  (22 assert): CASE1–CASE9 termasuk isolasi user dan penolakan video <100% → semua **PASS**.
+- **Boot test**: seluruh modul progress + `src/index.js` dimuat tanpa error.
+- **Verifikasi DB (read-only)**: tabel `user_content_progress` terkonfirmasi dibuat;
+  tidak ada tabel existing yang berubah; tidak ada operasi destruktif.
+
+> Catatan environment: `.env` pada working copy menunjuk ke database yang **stale**
+> (hanya berisi tabel dari migrasi awal; kolom `users.status`, tabel `mini_quizzes`,
+> dll tidak ada). Karena itu integrasi penuh dengan mini-quiz tidak dapat dijalankan
+> pada DB tersebut tanpa perubahan struktur (dilarang). Verifikasi service dilakukan
+> dengan mock. **Ini keterbatasan environment, bukan bug kode.**
+
+## 19. Out of Scope — ditemukan tetapi tidak diubah (Iterasi 2)
+
+- **OUT OF SCOPE** — `.env` pada working copy menunjuk DB stale/mismatch schema.
+- **OUT OF SCOPE** — `user_progress.preTestSkor` dibaca `courses.service.js` tapi tidak pernah ditulis.
+- **OUT OF SCOPE** — School-scoping, skoring >100%, `completeModule` bypass, error handling, rate limiting, dll.
+
+## 20. Cara Rollback Migration (bila perlu)
+
+Migration ini **additive** (hanya tabel baru). Rollback aman = drop tabel baru:
+`DROP TABLE "user_content_progress";` (manual, tidak dijalankan). Tidak ada data
+existing yang terpengaruh.
+

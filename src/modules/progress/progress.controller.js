@@ -118,10 +118,68 @@ const getProgressByModule = async (req, res) => {
   }
 }
 
+// ================================================
+// MARK CONTENT COMPLETE — Tandai satu material selesai
+// ================================================
+const markContentComplete = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { contentId } = req.params
+
+    const hasil = await progressService.markContentComplete(userId, contentId)
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: 'Material berhasil ditandai selesai',
+      data: hasil
+    })
+
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
+// UPDATE CONTENT PROGRESS — Update progress material (mis. video)
+// ================================================
+const updateContentProgress = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { contentId } = req.params
+    const { progressPercent } = req.body
+
+    if (progressPercent === undefined || progressPercent === null) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'progressPercent wajib diisi'
+      })
+    }
+
+    const hasil = await progressService.updateContentProgress(userId, contentId, progressPercent)
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: 'Progress material berhasil diperbarui',
+      data: hasil
+    })
+
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   getProgress,
   getSummary,
   startModule,
   completeModule,
-  getProgressByModule
+  getProgressByModule,
+  markContentComplete,
+  updateContentProgress
 }

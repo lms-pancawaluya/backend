@@ -41,6 +41,25 @@ router.post('/:moduleId/complete',
   progressController.completeModule
 )
 
+// ================================================
+// POST tandai material/konten selesai
+// (harus di atas '/:moduleId' agar 'contents' tidak dianggap moduleId)
+// ================================================
+router.post('/contents/:contentId/complete',
+  authMiddleware,
+  roleMiddleware('admin','guru'),
+  progressController.markContentComplete
+)
+
+// ================================================
+// POST update progress material (mis. video watched %)
+// ================================================
+router.post('/contents/:contentId/progress',
+  authMiddleware,
+  roleMiddleware('admin','guru'),
+  progressController.updateContentProgress
+)
+
 // GET progress satu modul spesifik
 router.get('/:moduleId',
   authMiddleware,

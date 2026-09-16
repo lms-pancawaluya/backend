@@ -106,7 +106,6 @@ model User {
   // Relasi
   courseProgress   user_course_progress[]
   progress         user_progress[]
-  contentProgress  user_content_progress[]
   answers          user_answers[]
   miniQuizAttempts MiniQuizAttempt[]
   feedbacks        Feedback[]
@@ -192,7 +191,6 @@ model Content {
   // Relasi
   module      Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   miniQuizzes MiniQuiz[]
-  contentProgress user_content_progress[]
 
   @@index([moduleId])
   @@map("contents")
@@ -282,25 +280,6 @@ model user_progress {
   @@map("user_progress")
 }
 
-model user_content_progress {
-  id              String    @id @default(uuid())
-  userId          String    @map("user_id")
-  contentId       String    @map("content_id")
-  isCompleted     Boolean   @default(false) @map("is_completed")
-  progressPercent Int       @default(0) @map("progress_percent")
-  completedAt     DateTime? @map("completed_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-
-  // Relasi
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, contentId])
-  @@index([userId])
-  @@index([contentId])
-  @@map("user_content_progress")
-}
-
 model user_answers {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
@@ -383,19 +362,14 @@ model Certificate {
   id              String   @id @default(uuid())
   userId          String   @map("user_id")
   courseId        String   @map("course_id")
-  recipientName   String   @map("recipient_name")
   nomorSertifikat String   @unique @map("nomor_sertifikat")
-  fileUrl         String?  @map("file_url") @db.Text
-  templateId      String?  @map("template_id")
-  status          String   @default("issued")
+  fileUrl         String   @map("file_url") @db.Text
   issuedAt        DateTime @default(now()) @map("issued_at")
-  createdAt       DateTime @default(now()) @map("created_at")
 
   // Relasi
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, courseId])
   @@index([userId])
   @@index([courseId])
   @@map("certificates")

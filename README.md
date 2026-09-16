@@ -235,6 +235,7 @@ Router evaluasi juga dipasang secara nested pada `/api/modules/:moduleId/evaluat
 
 - `GET /api/progress/` `(Admin atau Guru)`
   *Deskripsi:* Mengambil seluruh progress pengguna saat ini.
+  *Catatan:* Setiap item pada `data` kini menyertakan status per tahap (`preTestCompleted`, `materialCompleted`, `postTestCompleted`) per guru per modul. Lihat **Status Progress Per Tahap** di bawah.
 - `GET /api/progress/summary` `(Terautentikasi)`
   *Deskripsi:* Mengambil ringkasan progress seluruh modul pengguna saat ini.
 - `POST /api/progress/:moduleId/start` `(Admin atau Guru)`
@@ -243,6 +244,34 @@ Router evaluasi juga dipasang secara nested pada `/api/modules/:moduleId/evaluat
   *Deskripsi:* Menandai modul selesai untuk pengguna saat ini.
 - `GET /api/progress/:moduleId` `(Terautentikasi)`
   *Deskripsi:* Mengambil progress pengguna pada satu modul.
+  *Catatan:* Response juga menyertakan `preTestCompleted`, `materialCompleted`, dan `postTestCompleted` untuk modul tersebut.
+
+#### Status Progress Per Tahap (Stage-level)
+
+Frontend guru membutuhkan status kelulusan tiap tahap di dalam satu modul dengan urutan:
+
+```text
+Pre-Test → Learning Material → Post-Test
+```
+
+Setiap item pada `GET /api/progress/` dan response `GET /api/progress/:moduleId` menyertakan tiga boolean tambahan tanpa menghapus field lama:
+
+```json
+{
+  "moduleId": "…",
+  "preTestCompleted": false,
+  "materialCompleted": false,
+  "postTestCompleted": false
+}
+```
+
+Definisi (semuanya diturunkan dari data **existing**, tanpa perubahan skema database):
+
+- **`preTestCompleted`** — Guru sudah **submit pre-test** (ditandai dengan adanya jawaban pada evaluasi bertipe `pre_test` di modul tersebut). Ini berarti "sudah dikerjakan", **bukan** "lulus" (pre-test memang tidak memakai passing grade). Jika modul **tidak punya pre-test**, nilainya `true` (pre-test dianggap tidak diperlukan).
+- **`materialCompleted`** — Seluruh **mini kuis** pada materi modul sudah **lulus** (`MiniQuizAttempt.isLolos`). Ini konsisten dengan aturan auto-complete yang sudah dipakai oleh modul mini kuis. Jika modul **tidak punya mini kuis**, nilainya `true` (materi dianggap tidak diperlukan).
+- **`postTestCompleted`** — Skor utama guru (`user_progress.skor`) sudah **≥ passingScore** post-test. Berarti "lulus post-test", bukan sekadar membuka. Jika modul **tidak punya post-test**, nilainya `true`.
+
+Status dihitung **per guru per modul** (selalu memakai `userId` dari token), tidak pernah mengambil data guru lain.
 
 ### Rencana Tindak Lanjut — `/api/rtl`
 

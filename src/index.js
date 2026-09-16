@@ -1,5 +1,7 @@
 // src/index.js
 
+require('dotenv').config()
+
 const app = require('./config/app')
 const authRoute = require('./modules/auth/auth.route')
 const usersRoute = require('./modules/users/users.route')

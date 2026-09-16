@@ -20,6 +20,7 @@ const guruRoute = require('./modules/guru/guru.route')
 const notificationRoute = require('./modules/notifications/notifications.route')
 const searchRouter = require('./modules/search/search.route')
 const courseRoutes = require('./modules/courses/courses.routes');
+const certificateRoute = require('./modules/certificates/certificates.route');
 
 const PORT = process.env.PORT || 3000
 
@@ -41,6 +42,7 @@ app.use('/api/guru', guruRoute)
 app.use('/api/notifications', notificationRoute)
 app.use('/api/search', searchRouter)
 app.use('/api/courses', courseRoutes);
+app.use('/api/certificates', certificateRoute);
 
 
 

@@ -297,8 +297,50 @@ Material **tidak** dianggap selesai hanya karena halaman dibuka / endpoint diaks
 
 **Batas yang terdokumentasi (keterbatasan):** sistem belum memiliki tracking per-halaman/hitungan menit untuk `pdf`; completion `pdf`/`teks`/`link` bergantung pada penandaan eksplisit guru (`isCompleted`). Video memakai `progressPercent` sehingga FE wajib mengirim posisi tonton. Tidak ada mekanisme "interactive checkpoint" tersendiri — checkpoint diwakili oleh mini-quiz bertimestamp (`MiniQuiz.timestampSeconds`).
 
-### Rencana Tindak Lanjut — `/api/rtl`
+### Sertifikat — `/api/certificates`
 
+Sertifikat hanya dapat **diklaim** jika sebuah **Course telah 100% selesai**. Completion course dihitung dari logic progress per-tahap yang sudah ada (`preTestCompleted`, `materialCompleted`, `postTestCompleted`) — bukan dari sekadar membuka module/endpoint.
+
+```text
+Course 100% selesai → boleh claim → sertifikat dibuat dari profil user
+```
+
+- `GET /api/certificates/` `(Admin atau Guru)`
+  *Deskripsi:* Mengambil semua sertifikat milik pengguna saat ini.
+  *Response:* `{ sukses, jumlah, data: [...] }`, tiap item: `id`, `courseId`, `courseName`, `recipientName`, `certificateNumber`, `fileUrl`, `templateId`, `status`, `issuedAt`.
+- `POST /api/certificates/:courseId/claim` `(Admin atau Guru)`
+  *Deskripsi:* Mengklaim sertifikat untuk sebuah Course. **Tidak menerima nama dari FE** — nama diambil dari profil user.
+  *Body:* tidak diperlukan.
+  *Response:* `status` bernilai `created` (sertifikat baru dibuat) atau `already_claimed` (sudah pernah diklaim, mengembalikan yang existing).
+  *Ditolak:* `400` bila course belum 100%, `400` bila course tidak menyediakan sertifikat (`hasCertificate = false`), `403` bila bukan hak akses, `404` bila course tidak ada.
+- `GET /api/certificates/:id` `(Admin atau Guru)`
+  *Deskripsi:* Mengambil detail satu sertifikat. Hanya pemilik (atau admin).
+
+#### Aturan Kelayakan (Eligibility)
+
+- **Course 100%** = **seluruh module** pada course tersebut selesai.
+- **Module selesai** = seluruh tahap yang tersedia selesai (`preTestCompleted` **dan** `materialCompleted` **dan** `postTestCompleted`).
+- Module tanpa suatu tahap mengikuti logic existing (tahap yang tidak tersedia dianggap selesai).
+- Course dengan **0 module** **tidak** dianggap eligible (progress 0%).
+- Course dengan `hasCertificate = false` **tidak** dapat diklaim.
+
+#### Snapshot Nama (`recipientName`)
+
+Nama pada sertifikat diambil dari field `User.nama` (source of truth profil) **pada saat claim** dan disimpan sebagai **snapshot** (`recipientName`). Jika user mengganti nama profil setelah sertifikat diterbitkan, sertifikat lama **tetap** memakai nama saat penerbitan; sertifikat tidak mengandalkan data profil secara live.
+
+#### Nomor Sertifikat
+
+Format: `PANC-<TAHUN>-<8 karakter heksadesimal acak>`, contoh `PANC-2026-4F9A2C1D`. Unik, tidak bergantung pada nama user, dan diamankan oleh unique constraint.
+
+#### Idempotency
+
+Claim berulang untuk course yang sama **tidak** membuat sertifikat baru, **tidak** membuat nomor baru, dan **tidak** mengubah `issuedAt`; endpoint mengembalikan sertifikat existing dengan `status: "already_claimed"`. Unique constraint `@@unique([userId, courseId])` menjadi safety net saat race condition.
+
+#### Status Template Canva
+
+Template Canva **belum** tersedia sebagai aset/backend resource, sehingga **generation file PDF/gambar belum diimplementasikan**. Kolom `fileUrl` dan `templateId` sudah disiapkan (nullable) untuk mengakomodasi file hasil template di masa depan. Saat ini sertifikat diterbitkan sebagai **record** dengan `status: "issued"` (belum ada berkas); field `fileUrl` bernilai `null`. Lihat `handoff.md` untuk rincian pekerjaan lanjutan.
+
+### Rencana Tindak Lanjut — `/api/rtl`
 - `POST /api/rtl/upload` `(Terautentikasi)`
   *Deskripsi:* Menyimpan submission RTL pengguna saat ini, termasuk URL PDF dan data modul.
 - `GET /api/rtl/module/:moduleId` `(Terautentikasi)`

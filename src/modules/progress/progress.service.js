@@ -941,5 +941,8 @@ module.exports = {
   completeModule,
   getProgressByModule,
   markContentComplete,
-  updateContentProgress
+  updateContentProgress,
+  // Diekspor agar modul lain (mis. certificate) dapat memakai
+  // logic completion per-stage yang sama sebagai single source of truth.
+  hitungStageCompletion
 }

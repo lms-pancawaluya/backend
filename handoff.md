@@ -316,3 +316,167 @@ Migration ini **additive** (hanya tabel baru). Rollback aman = drop tabel baru:
 `DROP TABLE "user_content_progress";` (manual, tidak dijalankan). Tidak ada data
 existing yang terpengaruh.
 
+---
+---
+
+# Iterasi 3 — Fitur Sertifikat (Course Completion Certificate)
+
+Dokumen ini mencatat SATU perubahan fitur yang dibatasi scope-nya: **sistem
+sertifikat** untuk LMS Pancawaluya. Tanggal: diisi saat commit. Tidak ada secret
+pada dokumen ini.
+
+## 21. Latar Belakang (Iterasi 3)
+
+User (guru) harus menyelesaikan **seluruh course** sebelum boleh mengklaim
+sertifikat:
+
+```text
+COURSE 100% COMPLETE → claim certificate → certificate dibuat (nama dari profil)
+```
+
+## 22. Audit Existing (Iterasi 3)
+
+| Aspek | Temuan |
+|---|---|
+| Sumber Course/Module | Tabel `courses` & `modules`; relasi `Module.courseId -> Course.id` (nullable, `onDelete: Cascade`). |
+| Cara hitung completion | `progress.service.hitungStageCompletion(userId, moduleIds)` — menghitung `preTestCompleted`, `materialCompleted`, `postTestCompleted` per guru per module. **Dipakai ulang sebagai single source of truth.** |
+| Module selesai | `preTestCompleted && materialCompleted && postTestCompleted`. Stage yang tidak tersedia = `true` (logic existing). |
+| Course selesai | `jumlah module selesai === total module`. `courseProgress = round(completed/total*100)`. |
+| Sumber nama | Field **`User.nama`** — satu-satunya field nama profil (dipakai `auth.middleware`, `users.service`, dll). Tidak ada field nama lain. |
+| Model Certificate | **Sudah ada** di `schema.prisma` namun belum lengkap (tanpa `recipientName`, `createdAt`, `@@unique(userId,courseId)`, `fileUrl` wajib). Skema disesuaikan (additive). |
+| Tabel `certificates` di DB | **Belum ada** di database yang terhubung (DB stale — lihat §26). |
+| PDF/template generation | **Tidak tersedia** — tidak ada library PDF maupun aset Canva. |
+| Upload/storage | Supabase Storage (`config/supabase.js`) & Cloudinary tersedia, tetapi **tidak dipakai** di iterasi ini karena belum ada berkas untuk disimpan. |
+| Pola identifier unik | Ada pada `Ticket.ticketNumber` (mis. `TKT-...`). Nomor sertifikat dibuat mengikuti pola serupa. |
+| Pola controller/service/route | Ada 3 gaya di repo; certificate mengikuti pola `sukses/pesan/data` + `error.statusCode` (konsisten dengan `progress.controller` & `modules.controller`). |
+| Authorization | `authMiddleware` + `roleMiddleware('admin','guru')`. School-scope course mengikuti aturan existing di `courses.service.getCourseById`. |
+
+## 23. Perubahan Schema (Iterasi 3)
+
+Model `Certificate` (additive) — field baru/penyesuaian:
+
+```prisma
+model Certificate {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  courseId        String   @map("course_id")
+  recipientName   String   @map("recipient_name")      // BARU: snapshot nama
+  nomorSertifikat String   @unique @map("nomor_sertifikat")
+  fileUrl         String?  @map("file_url") @db.Text   // DIUBAH: nullable
+  templateId      String?  @map("template_id")         // BARU: referensi template
+  status          String   @default("issued")          // BARU
+  issuedAt        DateTime @default(now()) @map("issued_at")
+  createdAt       DateTime @default(now()) @map("created_at") // BARU
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])  // BARU: anti-duplikat 1 sertifikat/user/course
+  @@index([userId])
+  @@index([courseId])
+  @@map("certificates")
+}
+```
+
+Relasi balik `User.certificates` & `Course.certificates` **sudah ada** sebelumnya
+(tidak diubah).
+
+Migration: `prisma/migrations/20260916140658_add_certificate/migration.sql`
+(hanya `CREATE TABLE` + index + 2 FK; **tidak** menyentuh tabel existing).
+
+## 24. Contract Fitur (Iterasi 3)
+
+- **Eligibility**: claim hanya bila `courseProgress === 100%` (seluruh module selesai).
+- **recipientName**: snapshot `User.nama` saat claim.
+- **nomorSertifikat**: `PANC-<TAHUN>-<8 hex acak>`, unik.
+- **Idempotent**: claim ulang → `already_claimed` (nomor & `issuedAt` tidak berubah).
+- **0 module** → **tidak** eligible (progress 0%).
+- **hasCertificate = false** → ditolak (400).
+
+## 25. Endpoint Baru (Iterasi 3)
+
+- `GET /api/certificates/` `(Admin atau Guru)` — daftar sertifikat user.
+- `POST /api/certificates/:courseId/claim` `(Admin atau Guru)` — klaim; `status` = `created` | `already_claimed`.
+- `GET /api/certificates/:id` `(Admin atau Guru)` — detail sertifikat (pemilik/admin).
+
+Response memakai pola `{ sukses, pesan, data }`; error memakai `error.statusCode`
+(400/403/404). Tidak ada field existing yang dihapus.
+
+## 26. Edge Case (Iterasi 3)
+
+| # | Kondisi | Perilaku |
+|---|---|---|
+| 1 | Course tidak ditemukan | `404` |
+| 2 | Course 0 module | **ditolak** `400` (tidak otomatis eligible) |
+| 3 | Ada module belum selesai | `progress < 100%` → `400` |
+| 4 | Semua module selesai | `progress = 100%` → claim dibuat |
+| 5 | Sudah claim | `already_claimed`, tanpa duplikat |
+| 6 | Ganti nama profil setelah issue | sertifikat lama pakai snapshot |
+| 7 | Course bukan hak akses (school-scope) | `403` |
+| 8–10 | Module tanpa Pre-Test / Material / Post-Test | ikut logic existing (stage absen = `true`) |
+| 11 | Video belum 100% | module belum selesai (`materialCompleted=false`) |
+| 12 | Mini-quiz lulus tapi material belum selesai | tidak complete |
+| 13 | Material selesai tapi Post-Test belum memenuhi | tidak complete |
+
+## 27. File yang Diubah / Ditambah (Iterasi 3)
+
+Ditambah:
+- `src/modules/certificates/certificates.service.js`
+- `src/modules/certificates/certificates.controller.js`
+- `src/modules/certificates/certificates.route.js`
+- `prisma/migrations/20260916140658_add_certificate/migration.sql`
+- `test/certificates.test.js`
+
+Diubah:
+- `prisma/schema.prisma` — model `Certificate` (additive).
+- `src/index.js` — daftar `certificateRoute` di `/api/certificates`.
+- `src/modules/progress/progress.service.js` — **hanya mengekspor** `hitungStageCompletion` (tidak mengubah logic).
+- `package.json` — script `test`.
+- `README.md` & `handoff.md`.
+
+**Tidak diubah:** logic progress per-stage, pre-test/post-test/material/mini-quiz,
+auth/authorization di luar endpoint certificate, upload system, migration lama.
+
+## 28. Testing (Iterasi 3)
+
+Infrastruktur framework test tidak tersedia; test standalone dibuat tanpa
+menyentuh database (Prisma & progress.service di-mock):
+
+```
+node test/certificates.test.js   # atau: npm test
+```
+
+Hasil: **18 PASS, 0 FAIL** — mencakup CASE 1–13 (0%, <100%, 100%, nama profil,
+snapshot, idempotency, nomor unik, school-scope, 0 module, course tak ada,
+tanpa sertifikat, module tanpa stage, video belum 100%, mini-quiz vs material,
+post-test belum selesai, GET list/detail, race-condition P2002).
+
+Verifikasi lain (non-destruktif):
+- `npx prisma validate` → valid.
+- `npx prisma generate` → sukses.
+- Boot `src/index.js` → server berjalan tanpa error.
+- Migration SQL diperiksa: hanya additive.
+- **Tidak** menjalankan `prisma migrate`/`db push`/`reset`/`seed` terhadap DB.
+
+## 29. Batasan Environment
+
+`.env` pada working copy mengarah ke database yang **stale** (hanya sebagian tabel;
+`courses`/`certificates` belum ada). Karena itu migration **tidak dijalankan** ke DB
+(hanya dibuat sebagai file). Ini keterbatasan environment, bukan bug kode. Untuk
+menerapkan: pada environment dengan skema `courses` yang benar, jalankan
+`npx prisma migrate deploy`.
+
+## 30. Bagian yang Masih Pekerjaan FE / Lanjutan (Iterasi 3)
+
+- **Template Canva belum tersedia** → generation PDF/gambar belum diimplementasi.
+  Kolom `fileUrl` & `templateId` sudah disiapkan (nullable). Saat template siap:
+  buat generator, isi `fileUrl`, ubah `status` menjadi `generated`.
+- FE memanggil `POST /api/certificates/:courseId/claim` **tanpa** mengirim nama.
+- **OUT OF SCOPE** — perbaikan bug/security unrelated, refactor modul lain.
+
+## 31. Cara Rollback Migration (Iterasi 3)
+
+Migration additive: rollback aman = `DROP TABLE "certificates";` (manual, tidak
+dijalankan). Tidak ada data existing yang terpengaruh.
+
+

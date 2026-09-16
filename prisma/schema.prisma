@@ -383,14 +383,19 @@ model Certificate {
   id              String   @id @default(uuid())
   userId          String   @map("user_id")
   courseId        String   @map("course_id")
+  recipientName   String   @map("recipient_name")
   nomorSertifikat String   @unique @map("nomor_sertifikat")
-  fileUrl         String   @map("file_url") @db.Text
+  fileUrl         String?  @map("file_url") @db.Text
+  templateId      String?  @map("template_id")
+  status          String   @default("issued")
   issuedAt        DateTime @default(now()) @map("issued_at")
+  createdAt       DateTime @default(now()) @map("created_at")
 
   // Relasi
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, courseId])
   @@index([userId])
   @@index([courseId])
   @@map("certificates")

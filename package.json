@@ -9,6 +9,7 @@
     "test": "node test/certificates.test.js",
     "test:certgen": "node test/certificate-generation.test.js",
     "test:certpdf": "node test/certificate-pdf.test.js",
+    "test:prepost": "node test/pre-post-tests.test.js",
     "seed": "node prisma/seed.js"
   },
   "repository": {

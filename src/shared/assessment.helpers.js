@@ -1,11 +1,63 @@
-// src/modules/evaluations/evaluations.service.js
+// src/shared/assessment.helpers.js
+//
+// Helper bersama untuk domain Pre-Test & Post-Test.
+//
+// CATATAN PENTING:
+// Prisma/database MASIH memakai model `Evaluation` dengan field `tipe`
+// sebagai compatibility layer internal:
+//   "pre_test"  -> Pre-Test
+//   "post_test" -> Post-Test
+// Ini SENGAJA. Pemisahan tabel/model akan dilakukan pada task manual
+// berikutnya bersama developer. Helper ini TIDAK mengubah schema apa pun.
+//
+// Semua business logic (scoring, passing score, max attempts, mustRepeat,
+// progress, question/option/answer) DIPINDAH apa adanya dari module
+// evaluasi lama — tidak ada perubahan perilaku.
+//
+// Lokasi: src/shared/ — dipakai bersama oleh pre-tests/ dan post-tests/.
+// (Dipindah dari src/modules/evaluations/evaluation.helpers.js saat legacy
+// module dihapus.)
 
-const prisma = require('../../config/database')
+const prisma = require('../config/database')
 
 // ================================================
-// GET EVALUATIONS BY MODULE
+// ASSESSMENT DOMAIN CONSTANTS
 // ================================================
-const getEvaluationsByModule = async (moduleId) => {
+const ASSESSMENT_TYPE = {
+  PRE_TEST: 'pre_test',
+  POST_TEST: 'post_test'
+}
+
+// Nilai default business rule (dipertahankan persis seperti semula)
+const DEFAULT_PASSING_SCORE_POST_TEST = 80
+const DEFAULT_MAX_ATTEMPTS_POST_TEST = 3
+const PASSING_SCORE_PRE_TEST = 0
+const MAX_ATTEMPTS_PRE_TEST = 1
+
+// ================================================
+// TYPE HELPERS
+// ================================================
+const isPreTestType = (tipe) => tipe === ASSESSMENT_TYPE.PRE_TEST
+
+// Resolusi business rule saat submit (dari data evaluation existing).
+const resolveSubmitDefaults = (evaluation) => {
+  if (isPreTestType(evaluation.tipe)) {
+    return {
+      passingScore: PASSING_SCORE_PRE_TEST,
+      maxAttempts: MAX_ATTEMPTS_PRE_TEST
+    }
+  }
+
+  return {
+    passingScore: evaluation.passingScore || DEFAULT_PASSING_SCORE_POST_TEST,
+    maxAttempts: evaluation.maxAttempts || DEFAULT_MAX_ATTEMPTS_POST_TEST
+  }
+}
+
+// ================================================
+// MODULE / EVALUATION LOOKUPS (shared)
+// ================================================
+const assertModuleExists = async (moduleId) => {
   const moduleAda = await prisma.module.findUnique({
     where: { id: moduleId }
   })
@@ -14,29 +66,42 @@ const getEvaluationsByModule = async (moduleId) => {
     throw new Error('Modul tidak ditemukan')
   }
 
-  const evaluations = await prisma.evaluation.findMany({
-    where: { moduleId },
-    select: {
-      id: true,
-      judul: true,
-      tipe: true, // pre_test, post_test, atau module_eval
-      passingScore: true,
-      maxAttempts: true,
-      createdAt: true,
-      _count: {
-        select: { questions: true }
-      }
-    },
-    orderBy: { createdAt: 'asc' }
+  return moduleAda
+}
+
+// Ambil evaluation milik modul + pastikan tipenya sesuai domain
+// (pre_test / post_test). Dipakai oleh endpoint domain-specific agar
+// Pre-Test tidak menerima post_test dan sebaliknya.
+const getAssessmentInModule = async (moduleId, evaluationId, tipe) => {
+  const evaluationAda = await prisma.evaluation.findUnique({
+    where: { id: evaluationId }
   })
 
-  return evaluations
+  if (!evaluationAda) {
+    const error = new Error('Evaluasi tidak ditemukan')
+    error.statusCode = 404
+    throw error
+  }
+
+  if (evaluationAda.moduleId !== moduleId) {
+    const error = new Error('Evaluasi ini bukan milik modul tersebut')
+    error.statusCode = 400
+    throw error
+  }
+
+  if (evaluationAda.tipe !== tipe) {
+    const error = new Error('Tipe evaluasi tidak sesuai dengan endpoint ini')
+    error.statusCode = 400
+    throw error
+  }
+
+  return evaluationAda
 }
 
 // ================================================
-// GET EVALUATION BY ID + SOAL PG
+// GET ASSESSMENT BY ID + SOAL PG
 // ================================================
-const getEvaluationById = async (id) => {
+const getAssessmentById = async (id, tipe) => {
   const evaluation = await prisma.evaluation.findUnique({
     where: { id },
     select: {
@@ -68,33 +133,35 @@ const getEvaluationById = async (id) => {
     throw new Error('Evaluasi tidak ditemukan')
   }
 
+  // Pastikan assessment yang diminta sesuai tipe domain pemanggil.
+  if (tipe && evaluation.tipe !== tipe) {
+    throw new Error('Tipe evaluasi tidak sesuai dengan endpoint ini')
+  }
+
   return evaluation
 }
 
 // ================================================
-// CREATE EVALUATION (Dukungan Pre-Test & Post-Test)
+// CREATE ASSESSMENT (Pre-Test / Post-Test)
 // ================================================
-const createEvaluation = async (moduleId, data) => {
-  const { judul, tipe, passingScore, maxAttempts } = data
+const createAssessment = async (moduleId, tipe, data) => {
+  const { judul, passingScore, maxAttempts } = data
 
-  const moduleAda = await prisma.module.findUnique({
-    where: { id: moduleId }
-  })
+  await assertModuleExists(moduleId)
 
-  if (!moduleAda) {
-    throw new Error('Modul tidak ditemukan')
-  }
-
-  const isPreTest = tipe === 'pre_test'
+  const isPreTest = isPreTestType(tipe)
 
   const evaluationBaru = await prisma.evaluation.create({
-    data: { 
-      moduleId, 
+    data: {
+      moduleId,
       judul,
-      tipe: tipe || 'post_test',
-      // Pre-Test tidak perlu passing score & default 1x attempt
-      passingScore: isPreTest ? 0 : (passingScore || 80),
-      maxAttempts: isPreTest ? 1 : (maxAttempts || 3)
+      tipe,
+      passingScore: isPreTest
+        ? PASSING_SCORE_PRE_TEST
+        : (passingScore || DEFAULT_PASSING_SCORE_POST_TEST),
+      maxAttempts: isPreTest
+        ? MAX_ATTEMPTS_PRE_TEST
+        : (maxAttempts || DEFAULT_MAX_ATTEMPTS_POST_TEST)
     }
   })
 
@@ -102,7 +169,7 @@ const createEvaluation = async (moduleId, data) => {
 }
 
 // ================================================
-// CREATE QUESTION + OPTIONS (Murni PG)
+// QUESTION + OPTIONS (Murni PG)
 // ================================================
 const createQuestion = async (evaluationId, data) => {
   const { pertanyaan, options } = data
@@ -144,8 +211,72 @@ const createQuestion = async (evaluationId, data) => {
   return questionBaru
 }
 
+const updateQuestion = async (questionId, data) => {
+  const { pertanyaan, options } = data
+
+  const questionAda = await prisma.question.findUnique({
+    where: { id: questionId }
+  })
+
+  if (!questionAda) {
+    throw new Error('Soal tidak ditemukan')
+  }
+
+  if (options) {
+    if (options.length < 2) {
+      throw new Error('Soal pilihan ganda harus memiliki minimal 2 pilihan jawaban')
+    }
+    const adaJawabanBenar = options.some(opt => opt.isCorrect === true)
+    if (!adaJawabanBenar) {
+      throw new Error('Harus ada minimal 1 jawaban yang benar')
+    }
+  }
+
+  const updatedQuestion = await prisma.$transaction(async (tx) => {
+    if (options) {
+      await tx.option.deleteMany({
+        where: { questionId }
+      })
+    }
+
+    return await tx.question.update({
+      where: { id: questionId },
+      data: {
+        pertanyaan: pertanyaan || questionAda.pertanyaan,
+        ...(options && {
+          options: {
+            create: options.map(opt => ({
+              teksOpsi: opt.teksOpsi,
+              isCorrect: opt.isCorrect || false
+            }))
+          }
+        })
+      },
+      include: { options: true }
+    })
+  })
+
+  return updatedQuestion
+}
+
+const deleteQuestion = async (questionId) => {
+  const questionAda = await prisma.question.findUnique({
+    where: { id: questionId }
+  })
+
+  if (!questionAda) {
+    throw new Error('Soal tidak ditemukan')
+  }
+
+  await prisma.question.delete({
+    where: { id: questionId }
+  })
+
+  return { pesan: 'Soal berhasil dihapus' }
+}
+
 // ================================================
-// SUBMIT JAWABAN — Auto-Grading (Pre-Test vs Post-Test)
+// SUBMIT JAWABAN — Auto-Grading (logic existing, tidak diubah)
 // ================================================
 const submitJawaban = async (evaluationId, userId, data) => {
   const { jawaban } = data
@@ -184,7 +315,7 @@ const submitJawaban = async (evaluationId, userId, data) => {
       const pilihanBenar = question.options.find(
         opt => opt.id === item.jawaban && opt.isCorrect
       )
-      
+
       const isCorrect = !!pilihanBenar
       if (isCorrect) totalBenar++
 
@@ -211,9 +342,8 @@ const submitJawaban = async (evaluationId, userId, data) => {
 
   // 2. Kalkulasi Nilai
   const skor = Math.round((totalBenar / totalSoal) * 100)
-  const isPreTest = evaluationAda.tipe === 'pre_test'
-  const passingScore = isPreTest ? 0 : (evaluationAda.passingScore || 80)
-  const maxAttempts = isPreTest ? 1 : (evaluationAda.maxAttempts || 3)
+  const isPreTest = isPreTestType(evaluationAda.tipe)
+  const { passingScore, maxAttempts } = resolveSubmitDefaults(evaluationAda)
   const isLolos = skor >= passingScore
 
   // 3. Status Progress User di Modul Ini
@@ -391,83 +521,36 @@ const getMyAnswers = async (evaluationId, userId) => {
 }
 
 // ================================================
-// UPDATE QUESTION & OPTIONS
+// DELETE ASSESSMENT (Pre-Test / Post-Test)
 // ================================================
-const updateQuestion = async (questionId, data) => {
-  const { pertanyaan, options } = data
+// Cascade ke questions/options/user_answers ditangani oleh FK existing
+// (onDelete: Cascade) — tidak ada cleanup manual & tidak ada perubahan schema.
+const deleteAssessment = async (moduleId, evaluationId, tipe) => {
+  const evaluationAda = await getAssessmentInModule(moduleId, evaluationId, tipe)
 
-  const questionAda = await prisma.question.findUnique({
-    where: { id: questionId }
+  await prisma.evaluation.delete({
+    where: { id: evaluationAda.id }
   })
 
-  if (!questionAda) {
-    throw new Error('Soal tidak ditemukan')
+  const isPreTest = isPreTestType(evaluationAda.tipe)
+  return {
+    pesan: isPreTest ? 'Pre-Test berhasil dihapus' : 'Post-Test berhasil dihapus'
   }
-
-  if (options) {
-    if (options.length < 2) {
-      throw new Error('Soal pilihan ganda harus memiliki minimal 2 pilihan jawaban')
-    }
-    const adaJawabanBenar = options.some(opt => opt.isCorrect === true)
-    if (!adaJawabanBenar) {
-      throw new Error('Harus ada minimal 1 jawaban yang benar')
-    }
-  }
-
-  const updatedQuestion = await prisma.$transaction(async (tx) => {
-    if (options) {
-      await tx.option.deleteMany({
-        where: { questionId }
-      })
-    }
-
-    return await tx.question.update({
-      where: { id: questionId },
-      data: {
-        pertanyaan: pertanyaan || questionAda.pertanyaan,
-        ...(options && {
-          options: {
-            create: options.map(opt => ({
-              teksOpsi: opt.teksOpsi,
-              isCorrect: opt.isCorrect || false
-            }))
-          }
-        })
-      },
-      include: { options: true }
-    })
-  })
-
-  return updatedQuestion
-}
-
-// ================================================
-// DELETE QUESTION
-// ================================================
-const deleteQuestion = async (questionId) => {
-  const questionAda = await prisma.question.findUnique({
-    where: { id: questionId }
-  })
-
-  if (!questionAda) {
-    throw new Error('Soal tidak ditemukan')
-  }
-
-  await prisma.question.delete({
-    where: { id: questionId }
-  })
-
-  return { pesan: 'Soal berhasil dihapus' }
 }
 
 module.exports = {
-  getEvaluationsByModule,
-  getEvaluationById,
-  createEvaluation,
+  ASSESSMENT_TYPE,
+  isPreTestType,
+  resolveSubmitDefaults,
+  assertModuleExists,
+  getAssessmentInModule,
+  getAssessmentById,
+  createAssessment,
   createQuestion,
   updateQuestion,
   deleteQuestion,
   submitJawaban,
   getAnswersByEvaluation,
-  getMyAnswers 
+  getMyAnswers,
+  deleteAssessment
 }

@@ -1,52 +1,40 @@
-// src/modules/evaluations/evaluations.route.js
+// src/modules/pre-tests/pre-tests.route.js
+//
+// Route domain Pre-Test.
+// Ter-mount di `/api/modules/:moduleId/pre-tests` (mergeParams: true),
+// sehingga `:moduleId` tersedia dari parent router.
 
 const express = require('express')
 const router = express.Router({ mergeParams: true })
-const evaluationsController = require('./evaluations.controller')
+const preTestsController = require('./pre-tests.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
 
 // ================================================
-// GET evaluasi di modul — Admin & Guru
+// GET pre-test di modul — Admin & Guru
 // ================================================
 router.get('/',
   authMiddleware,
-  evaluationsController.getEvaluationsByModule
+  preTestsController.getPreTestsByModule
 )
 
 // ================================================
-// GET detail evaluasi + soal — Admin & Guru
-// ================================================
-router.get('/:id',
-  authMiddleware,
-  evaluationsController.getEvaluationById
-)
-
-// ================================================
-// POST buat evaluasi — Hanya admin (Pre-Test & Post-Test)
+// POST buat pre-test — Hanya admin
 // ================================================
 router.post('/',
   authMiddleware,
   roleMiddleware('admin'),
-  evaluationsController.createEvaluation
-)
-
-// ================================================
-// POST tambah soal ke evaluasi — Hanya admin
-// ================================================
-router.post('/:id/questions',
-  authMiddleware,
-  roleMiddleware('admin'),
-  evaluationsController.createQuestion
+  preTestsController.createPreTest
 )
 
 // ================================================
 // PUT update soal — Hanya admin
+// (harus didahulukan agar tidak bentrok dengan '/:preTestId')
 // ================================================
 router.put('/questions/:questionId',
   authMiddleware,
   roleMiddleware('admin'),
-  evaluationsController.updateQuestion
+  preTestsController.updateQuestion
 )
 
 // ================================================
@@ -55,33 +43,59 @@ router.put('/questions/:questionId',
 router.delete('/questions/:questionId',
   authMiddleware,
   roleMiddleware('admin'),
-  evaluationsController.deleteQuestion
+  preTestsController.deleteQuestion
 )
 
 // ================================================
-// POST submit jawaban — Hanya guru
+// GET detail pre-test + soal — Admin & Guru
 // ================================================
-router.post('/:id/submit',
+router.get('/:preTestId',
   authMiddleware,
-  roleMiddleware('guru'),
-  evaluationsController.submitJawaban
+  preTestsController.getPreTestById
 )
 
 // ================================================
-// GET semua jawaban di evaluasi — Hanya admin
+// DELETE hapus pre-test — Hanya admin
 // ================================================
-router.get('/:id/answers',
+router.delete('/:preTestId',
   authMiddleware,
   roleMiddleware('admin'),
-  evaluationsController.getAnswersByEvaluation
+  preTestsController.deletePreTest
+)
+
+// ================================================
+// POST tambah soal ke pre-test — Hanya admin
+// ================================================
+router.post('/:preTestId/questions',
+  authMiddleware,
+  roleMiddleware('admin'),
+  preTestsController.createQuestion
+)
+
+// ================================================
+// POST submit jawaban pre-test — Hanya guru
+// ================================================
+router.post('/:preTestId/submit',
+  authMiddleware,
+  roleMiddleware('guru'),
+  preTestsController.submitPreTest
+)
+
+// ================================================
+// GET semua jawaban di pre-test — Hanya admin
+// ================================================
+router.get('/:preTestId/answers',
+  authMiddleware,
+  roleMiddleware('admin'),
+  preTestsController.getAnswersByPreTest
 )
 
 // ================================================
 // GET jawaban saya sendiri — Guru
 // ================================================
-router.get('/:id/my-answers',
+router.get('/:preTestId/my-answers',
   authMiddleware,
-  evaluationsController.getMyAnswers
+  preTestsController.getMyAnswers
 )
 
 module.exports = router

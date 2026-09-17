@@ -192,46 +192,95 @@ Router konten juga dipasang secara nested pada `/api/modules/:moduleId/contents`
 - `DELETE /api/contents/:id` `(Admin)`
   *Deskripsi:* Menghapus konten berdasarkan ID.
 
-### Evaluasi Modul — `/api/evaluations`
+### Pre-Test Modul — `/api/modules/:moduleId/pre-tests`
 
-Router evaluasi juga dipasang secara nested pada `/api/modules/:moduleId/evaluations`.
+Domain Pre-Test (secara internal `Evaluation.tipe = "pre_test"`). Router
+ter-mount nested pada `modules.route.js`.
 
-- `GET /api/modules/:moduleId/evaluations/` `(Terautentikasi)`
-  *Deskripsi:* Mengambil evaluasi pada modul.
-- `GET /api/modules/:moduleId/evaluations/:id` `(Terautentikasi)`
-  *Deskripsi:* Mengambil detail evaluasi beserta soal.
-- `POST /api/modules/:moduleId/evaluations/` `(Admin)`
-  *Deskripsi:* Membuat evaluasi pada modul.
-- `POST /api/modules/:moduleId/evaluations/:id/questions` `(Admin)`
+- `GET /api/modules/:moduleId/pre-tests` `(Terautentikasi)`
+  *Deskripsi:* Mengambil daftar Pre-Test pada modul.
+- `GET /api/modules/:moduleId/pre-tests/:preTestId` `(Terautentikasi)`
+  *Deskripsi:* Mengambil detail Pre-Test beserta soal.
+- `POST /api/modules/:moduleId/pre-tests` `(Admin)`
+  *Deskripsi:* Membuat Pre-Test (passing score `0`, max attempts `1`).
+- `POST /api/modules/:moduleId/pre-tests/:preTestId/questions` `(Admin)`
   *Deskripsi:* Menambahkan soal pilihan ganda.
-- `PUT /api/modules/:moduleId/evaluations/questions/:questionId` `(Admin)`
-  *Deskripsi:* Memperbarui soal evaluasi.
-- `DELETE /api/modules/:moduleId/evaluations/questions/:questionId` `(Admin)`
-  *Deskripsi:* Menghapus soal evaluasi.
-- `POST /api/modules/:moduleId/evaluations/:id/submit` `(Guru)`
-  *Deskripsi:* Mengirim jawaban evaluasi untuk dinilai.
-- `GET /api/modules/:moduleId/evaluations/:id/answers` `(Admin)`
-  *Deskripsi:* Mengambil jawaban semua pengguna pada evaluasi.
-- `GET /api/modules/:moduleId/evaluations/:id/my-answers` `(Terautentikasi)`
+- `PUT /api/modules/:moduleId/pre-tests/questions/:questionId` `(Admin)`
+  *Deskripsi:* Memperbarui soal.
+- `DELETE /api/modules/:moduleId/pre-tests/questions/:questionId` `(Admin)`
+  *Deskripsi:* Menghapus soal.
+- `DELETE /api/modules/:moduleId/pre-tests/:preTestId` `(Admin)`
+  *Deskripsi:* Menghapus Pre-Test (pesan: `"Pre-Test berhasil dihapus"`).
+- `POST /api/modules/:moduleId/pre-tests/:preTestId/submit` `(Guru)`
+  *Deskripsi:* Submit jawaban Pre-Test; submit mengubah modul → `sedang_belajar`
+  dan tidak menimpa skor utama.
+- `GET /api/modules/:moduleId/pre-tests/:preTestId/answers` `(Admin)`
+  *Deskripsi:* Mengambil jawaban semua pengguna.
+- `GET /api/modules/:moduleId/pre-tests/:preTestId/my-answers` `(Terautentikasi)`
   *Deskripsi:* Mengambil jawaban pengguna saat ini.
-- `GET /api/evaluations/` `(Terautentikasi)`
-  *Deskripsi:* Route langsung untuk mengambil evaluasi; controller menggunakan parameter `moduleId`.
-- `GET /api/evaluations/:id` `(Terautentikasi)`
-  *Deskripsi:* Mengambil detail evaluasi beserta soal.
-- `POST /api/evaluations/` `(Admin)`
-  *Deskripsi:* Route langsung untuk membuat evaluasi; controller menggunakan parameter `moduleId`.
-- `POST /api/evaluations/:id/questions` `(Admin)`
-  *Deskripsi:* Menambahkan soal evaluasi.
-- `PUT /api/evaluations/questions/:questionId` `(Admin)`
-  *Deskripsi:* Memperbarui soal evaluasi.
-- `DELETE /api/evaluations/questions/:questionId` `(Admin)`
-  *Deskripsi:* Menghapus soal evaluasi.
-- `POST /api/evaluations/:id/submit` `(Guru)`
-  *Deskripsi:* Mengirim jawaban evaluasi.
-- `GET /api/evaluations/:id/answers` `(Admin)`
-  *Deskripsi:* Mengambil jawaban seluruh pengguna pada evaluasi.
-- `GET /api/evaluations/:id/my-answers` `(Terautentikasi)`
+
+### Post-Test Modul — `/api/modules/:moduleId/post-tests`
+
+Domain Post-Test (secara internal `Evaluation.tipe = "post_test"`). Struktur
+route identik dengan Pre-Test.
+
+- `GET /api/modules/:moduleId/post-tests` `(Terautentikasi)`
+  *Deskripsi:* Mengambil daftar Post-Test pada modul.
+- `GET /api/modules/:moduleId/post-tests/:postTestId` `(Terautentikasi)`
+  *Deskripsi:* Mengambil detail Post-Test beserta soal.
+- `POST /api/modules/:moduleId/post-tests` `(Admin)`
+  *Deskripsi:* Membuat Post-Test (default passing score `80`, default max attempts `3`).
+- `POST /api/modules/:moduleId/post-tests/:postTestId/questions` `(Admin)`
+  *Deskripsi:* Menambahkan soal pilihan ganda.
+- `PUT /api/modules/:moduleId/post-tests/questions/:questionId` `(Admin)`
+  *Deskripsi:* Memperbarui soal.
+- `DELETE /api/modules/:moduleId/post-tests/questions/:questionId` `(Admin)`
+  *Deskripsi:* Menghapus soal.
+- `DELETE /api/modules/:moduleId/post-tests/:postTestId` `(Admin)`
+  *Deskripsi:* Menghapus Post-Test (pesan: `"Post-Test berhasil dihapus"`).
+- `POST /api/modules/:moduleId/post-tests/:postTestId/submit` `(Guru)`
+  *Deskripsi:* Submit jawaban Post-Test; lulus → `selesai`, gagal →
+  `sedang_belajar`, capai max attempts → `mustRepeat` + reset.
+- `GET /api/modules/:moduleId/post-tests/:postTestId/answers` `(Admin)`
+  *Deskripsi:* Mengambil jawaban semua pengguna.
+- `GET /api/modules/:moduleId/post-tests/:postTestId/my-answers` `(Terautentikasi)`
   *Deskripsi:* Mengambil jawaban pengguna saat ini.
+
+#### Domain Pre-Test & Post-Test
+
+Secara domain, evaluasi dipisah menjadi dua module:
+
+```text
+src/modules/pre-tests/     → Pre-Test  (Evaluation.tipe = "pre_test")
+src/modules/post-tests/    → Post-Test (Evaluation.tipe = "post_test")
+```
+
+Business logic berada di module masing-masing (`pre-tests.service.js`,
+`post-tests.service.js`) dan memakai helper bersama
+(`src/shared/assessment.helpers.js`). **Prisma/database masih memakai model
+`Evaluation` + field `tipe` sebagai persistence compatibility layer
+internal** dan belum dipisahkan; pemisahan tabel akan dilakukan pada task
+manual berikutnya bersama developer.
+
+- **Pre-Test** → passing score `0`, max attempts `1`.
+- **Post-Test** → default passing score `80`, default max attempts `3`.
+
+Arsitektur saat ini:
+
+```text
+Endpoint domain (/api/modules/:moduleId/pre-tests, /post-tests)
+    ↓ (pre-tests.service.js / post-tests.service.js)
+src/shared/assessment.helpers.js (business logic bersama)
+    ↓
+Prisma model Evaluation (persistence compatibility layer database)
+```
+
+> **Catatan migrasi:** module legacy `src/modules/evaluations/` **sudah
+> dihapus** dari application code. Endpoint legacy `/api/evaluations` dan
+> `/api/modules/:moduleId/evaluations` **sudah tidak tersedia**. Database
+> **belum** berubah: Prisma masih memakai model `Evaluation`, sehingga
+> modul `progress`, `courses`, `modules`, dan `admin-monitoring` tetap
+> membaca data assessment langsung dari Prisma model tersebut.
 
 ### Progress Belajar — `/api/progress`
 

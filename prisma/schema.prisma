@@ -9,7 +9,7 @@ generator client {
 }
 
 // ==========================================
-// ENUMS (Daftar Pilihan Tetap)
+// ENUMS
 // ==========================================
 
 enum Role {
@@ -65,18 +65,12 @@ enum TicketStatus {
 }
 
 enum CourseMode {
-  offline // Course Tatap Muka
-  online // Course Mandiri
-}
-
-enum EvaluationType {
-  pre_test // Pre-Test Pelatihan
-  post_test // Post-Test Akhir Pelatihan
-  module_eval // Evaluasi per Modul (Kuis Modul)
+  offline
+  online
 }
 
 // ==========================================
-// TABEL DATABASE (MODELS)
+// USER
 // ==========================================
 
 model User {
@@ -89,7 +83,7 @@ model User {
   nip      String?    @unique @map("nip")
   sekolah  String?    @map("sekolah")
 
-  // Relasi ke MasterSekolah untuk School-Scope Otorisasi
+  // Relasi ke MasterSekolah
   schoolId String?        @map("school_id")
   school   MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
 
@@ -111,12 +105,12 @@ model User {
   feedbacks        Feedback[]
   comments         Comment[]
   rtlSubmissions   RtlSubmission[]
-  reviewedRtls     RtlSubmission[]        @relation("TrainerRtlReviewer")
-  tickets          Ticket[]               @relation("UserTickets")
-  ticketReplies    TicketReply[]          @relation("UserTicketReplies")
+  reviewedRtls     RtlSubmission[] @relation("TrainerRtlReviewer")
+  tickets          Ticket[]        @relation("UserTickets")
+  ticketReplies    TicketReply[]   @relation("UserTicketReplies")
   notifications    Notification[]
   certificates     Certificate[]
-  createdCourses   Course[]               @relation("UserCreatedCourses")
+  createdCourses   Course[]        @relation("UserCreatedCourses")
 
   // Progress per material
   contentProgress UserContentProgress[]
@@ -124,6 +118,10 @@ model User {
   @@index([schoolId])
   @@map("users")
 }
+
+// ==========================================
+// COURSE
+// ==========================================
 
 model Course {
   id             String     @id @default(uuid())
@@ -134,21 +132,20 @@ model Course {
   hasCertificate Boolean    @default(true) @map("has_certificate")
 
   // Certificate Template
-  // Nullable agar course tetap valid meskipun belum memiliki template.
   certificateTemplateUrl String? @map("certificate_template_url") @db.Text
   certificateTemplateId  String? @map("certificate_template_id")
   certificateOverlay     Json?   @map("certificate_overlay")
 
   // Scope & Ownership
-  // Jika schoolId = null -> GLOBAL (Dapat diakses oleh semua sekolah & guru)
-  // Jika schoolId terisi -> SCOPE SEKOLAH (Khusus untuk pengajar & guru di sekolah terkait)
+  // null  -> GLOBAL
+  // value -> SCOPE SEKOLAH
   schoolId String?        @map("school_id")
   school   MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
 
-  createdBy String? @map("created_by") // User ID pembuat course
+  createdBy String? @map("created_by")
   creator   User?   @relation("UserCreatedCourses", fields: [createdBy], references: [id], onDelete: SetNull)
 
-  // Detail khusus jika mode Offline
+  // Detail khusus mode Offline
   lokasi         String?
   tanggalMulai   DateTime? @map("tanggal_mulai")
   tanggalSelesai DateTime? @map("tanggal_selesai")
@@ -166,9 +163,13 @@ model Course {
   @@map("courses")
 }
 
+// ==========================================
+// MODULE
+// ==========================================
+
 model Module {
   id               String            @id @default(uuid())
-  courseId         String?           @map("course_id") // Optional jika modul belum dimasukkan ke course
+  courseId         String?           @map("course_id")
   judul            String
   deskripsi        String            @db.Text
   aspekPancawaluya AspekPancawaluya? @default(umum) @map("aspek_pancawaluya")
@@ -178,7 +179,11 @@ model Module {
   // Relasi
   course         Course?         @relation(fields: [courseId], references: [id], onDelete: Cascade)
   contents       Content[]
-  evaluations    Evaluation[]
+
+  // Evaluasi yang sudah dipisahkan
+  preTests  PreTest[]
+  postTests PostTest[]
+
   progress       user_progress[]
   feedbacks      Feedback[]
   rtlSubmissions RtlSubmission[]
@@ -187,6 +192,10 @@ model Module {
   @@index([courseId])
   @@map("modules")
 }
+
+// ==========================================
+// CONTENT
+// ==========================================
 
 model Content {
   id        String      @id @default(uuid())
@@ -206,39 +215,99 @@ model Content {
   @@map("contents")
 }
 
-model Evaluation {
-  id           String         @id @default(uuid())
-  moduleId     String?        @map("module_id") // Nullable jika evaluasi tingkat global
+// ==========================================
+// PRE-TEST
+// ==========================================
+//
+// Menggantikan:
+// Evaluation(tipe = pre_test)
+//
+// Struktur:
+// Module -> PreTest -> Question -> Option
+//
+
+model PreTest {
+  id           String   @id @default(uuid())
+  moduleId     String   @map("module_id")
   judul        String
-  tipe         EvaluationType @default(module_eval)
-  passingScore Int            @default(80) @map("passing_score")
-  maxAttempts  Int            @default(3) @map("max_attempts")
-  createdAt    DateTime       @default(now()) @map("created_at")
+  passingScore Int      @default(0) @map("passing_score")
+  maxAttempts  Int      @default(1) @map("max_attempts")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   // Relasi
-  module    Module?    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  questions Question[]
+  module    Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions Question[] @relation("PreTestQuestions")
 
   @@index([moduleId])
-  @@index([tipe])
-  @@map("evaluations")
+  @@map("pre_tests")
 }
 
-model Question {
-  id           String       @id @default(uuid())
-  evaluationId String       @map("evaluation_id")
-  pertanyaan   String       @db.Text
-  tipe         QuestionType @default(pilihan_ganda)
-  createdAt    DateTime     @default(now()) @map("created_at")
+// ==========================================
+// POST-TEST
+// ==========================================
+//
+// Menggantikan:
+// Evaluation(tipe = post_test)
+//
+// Struktur:
+// Module -> PostTest -> Question -> Option
+//
+
+model PostTest {
+  id           String   @id @default(uuid())
+  moduleId     String   @map("module_id")
+  judul        String
+  passingScore Int      @default(80) @map("passing_score")
+  maxAttempts  Int      @default(3) @map("max_attempts")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   // Relasi
-  evaluation Evaluation     @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
-  options    Option[]
-  answers    user_answers[]
+  module    Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  questions Question[] @relation("PostTestQuestions")
 
-  @@index([evaluationId])
+  @@index([moduleId])
+  @@map("post_tests")
+}
+
+// ==========================================
+// QUESTION
+// ==========================================
+//
+// Sebelumnya:
+// Question -> Evaluation
+//
+// Sekarang:
+// Question -> PreTest ATAU PostTest
+//
+// Satu question hanya boleh menjadi milik
+// salah satu assessment.
+//
+
+model Question {
+  id          String       @id @default(uuid())
+
+  preTestId   String?      @map("pre_test_id")
+  postTestId  String?      @map("post_test_id")
+
+  pertanyaan  String       @db.Text
+  tipe        QuestionType @default(pilihan_ganda)
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  // Relasi
+  preTest     PreTest?     @relation("PreTestQuestions", fields: [preTestId], references: [id], onDelete: Cascade)
+  postTest    PostTest?    @relation("PostTestQuestions", fields: [postTestId], references: [id], onDelete: Cascade)
+
+  options     Option[]
+  answers     user_answers[]
+
+  @@index([preTestId])
+  @@index([postTestId])
   @@map("questions")
 }
+
+// ==========================================
+// OPTION
+// ==========================================
 
 model Option {
   id         String  @id @default(uuid())
@@ -252,6 +321,10 @@ model Option {
   @@index([questionId])
   @@map("options")
 }
+
+// ==========================================
+// COURSE PROGRESS
+// ==========================================
 
 model user_course_progress {
   id          String         @id @default(uuid())
@@ -271,22 +344,8 @@ model user_course_progress {
 }
 
 // ==========================================
-// PROGRESS PER MATERIAL
+// USER CONTENT PROGRESS
 // ==========================================
-//
-// Digunakan untuk menentukan apakah seluruh
-// material dalam sebuah module sudah selesai.
-//
-// Contoh:
-// Video  -> progress 100 / completed
-// PDF    -> completed
-// Teks   -> completed
-// Link   -> completed
-//
-// Backend yang menentukan completion.
-// FE hanya mengirim progress/completion sesuai
-// endpoint yang telah disediakan.
-//
 
 model UserContentProgress {
   id          String    @id @default(uuid())
@@ -302,21 +361,29 @@ model UserContentProgress {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
 
-  // Satu user hanya memiliki satu progress
-  // untuk satu content.
   @@unique([userId, contentId])
   @@index([userId])
   @@index([contentId])
   @@map("user_content_progress")
 }
 
+// ==========================================
+// MODULE PROGRESS
+// ==========================================
+
 model user_progress {
   id          String         @id @default(uuid())
   userId      String         @map("user_id")
   moduleId    String         @map("module_id")
   status      ProgressStatus @default(belum_mulai)
+
+  // Dipertahankan untuk kompatibilitas data existing.
+  // Logic Pre-Test saat ini menggunakan user_answers.
   preTestSkor Int?           @default(0) @map("pre_test_skor")
-  skor        Int?           @default(0) // Skor post-test / evaluasi utama
+
+  // Skor Post-Test / evaluasi utama
+  skor        Int?           @default(0)
+
   attempts    Int            @default(0)
   completedAt DateTime?      @map("completed_at")
 
@@ -329,6 +396,15 @@ model user_progress {
   @@index([moduleId])
   @@map("user_progress")
 }
+
+// ==========================================
+// USER ANSWERS
+// ==========================================
+//
+// Jawaban tetap terhubung ke Question.
+// Karena Question sudah mengetahui apakah dia
+// milik PreTest atau PostTest.
+//
 
 model user_answers {
   id         String   @id @default(uuid())
@@ -348,6 +424,10 @@ model user_answers {
   @@map("user_answers")
 }
 
+// ==========================================
+// FEEDBACK
+// ==========================================
+
 model Feedback {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
@@ -364,6 +444,10 @@ model Feedback {
   @@index([moduleId])
   @@map("feedbacks")
 }
+
+// ==========================================
+// COMMENT
+// ==========================================
 
 model Comment {
   id        String   @id @default(uuid())
@@ -384,6 +468,10 @@ model Comment {
   @@index([parentId])
   @@map("comments")
 }
+
+// ==========================================
+// RTL SUBMISSION
+// ==========================================
 
 model RtlSubmission {
   id             String    @id @default(uuid())
@@ -425,9 +513,6 @@ model Certificate {
   issuedAt DateTime @default(now()) @map("issued_at")
 
   // Metadata certificate
-  // Nama penerima disimpan sebagai snapshot agar
-  // perubahan nama profile setelah certificate dibuat
-  // tidak mengubah certificate yang sudah diterbitkan.
   recipientName String   @map("recipient_name")
   templateId    String?  @map("template_id")
   status        String   @default("issued") @map("status")
@@ -437,13 +522,15 @@ model Certificate {
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
-  // Satu user hanya boleh memiliki satu
-  // certificate untuk satu course.
   @@unique([userId, courseId])
   @@index([userId])
   @@index([courseId])
   @@map("certificates")
 }
+
+// ==========================================
+// MINI QUIZ
+// ==========================================
 
 model MiniQuiz {
   id               String   @id @default(uuid())
@@ -509,6 +596,10 @@ model MiniQuizAttempt {
   @@map("mini_quiz_attempts")
 }
 
+// ==========================================
+// TICKET
+// ==========================================
+
 model Ticket {
   id           String       @id @default(uuid())
   ticketNumber String       @unique @map("ticket_number")
@@ -542,6 +633,10 @@ model TicketReply {
   @@map("ticket_replies")
 }
 
+// ==========================================
+// NOTIFICATION
+// ==========================================
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
@@ -558,6 +653,10 @@ model Notification {
   @@map("notifications")
 }
 
+// ==========================================
+// MASTER SEKOLAH
+// ==========================================
+
 model MasterSekolah {
   id            String   @id @default(uuid())
   npsn          String?  @unique @map("npsn")
@@ -570,12 +669,16 @@ model MasterSekolah {
   akreditasi    String?  @map("akreditasi")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  // Relasi ke User dan Course
+  // Relasi
   users   User[]
   courses Course[]
 
   @@map("master_sekolah")
 }
+
+// ==========================================
+// MASTER GURU
+// ==========================================
 
 model MasterGuru {
   id          String   @id @default(uuid())

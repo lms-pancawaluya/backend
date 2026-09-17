@@ -1,19 +1,19 @@
-// src/modules/evaluations/evaluations.controller.js
+// src/modules/pre-tests/pre-tests.controller.js
 
-const evaluationsService = require('./evaluations.service')
+const preTestsService = require('./pre-tests.service')
 
 // ================================================
-// GET EVALUATIONS BY MODULE
+// GET PRE-TEST DI MODUL
 // ================================================
-const getEvaluationsByModule = async (req, res) => {
+const getPreTestsByModule = async (req, res) => {
   try {
     const { moduleId } = req.params
-    const evaluations = await evaluationsService.getEvaluationsByModule(moduleId)
+    const preTests = await preTestsService.getPreTestsByModule(moduleId)
 
     return res.status(200).json({
       sukses: true,
-      jumlah: evaluations.length,
-      data: evaluations
+      jumlah: preTests.length,
+      data: preTests
     })
   } catch (error) {
     return res.status(404).json({
@@ -24,16 +24,16 @@ const getEvaluationsByModule = async (req, res) => {
 }
 
 // ================================================
-// GET EVALUATION BY ID + SOAL
+// GET PRE-TEST BY ID + SOAL
 // ================================================
-const getEvaluationById = async (req, res) => {
+const getPreTestById = async (req, res) => {
   try {
-    const { id } = req.params
-    const evaluation = await evaluationsService.getEvaluationById(id)
+    const { preTestId } = req.params
+    const preTest = await preTestsService.getPreTestById(preTestId)
 
     return res.status(200).json({
       sukses: true,
-      data: evaluation
+      data: preTest
     })
   } catch (error) {
     return res.status(404).json({
@@ -44,12 +44,12 @@ const getEvaluationById = async (req, res) => {
 }
 
 // ================================================
-// CREATE EVALUATION — Hanya admin (Pre-Test & Post-Test)
+// CREATE PRE-TEST — Hanya admin
 // ================================================
-const createEvaluation = async (req, res) => {
+const createPreTest = async (req, res) => {
   try {
     const { moduleId } = req.params
-    const { judul, tipe, passingScore, maxAttempts } = req.body
+    const { judul } = req.body
 
     if (!judul) {
       return res.status(400).json({
@@ -58,15 +58,12 @@ const createEvaluation = async (req, res) => {
       })
     }
 
-    const evaluationBaru = await evaluationsService.createEvaluation(
-      moduleId,
-      { judul, tipe, passingScore, maxAttempts }
-    )
+    const preTestBaru = await preTestsService.createPreTest(moduleId, { judul })
 
     return res.status(201).json({
       sukses: true,
-      pesan: 'Evaluasi berhasil dibuat',
-      data: evaluationBaru
+      pesan: 'Pre-Test berhasil dibuat',
+      data: preTestBaru
     })
   } catch (error) {
     return res.status(400).json({
@@ -81,7 +78,7 @@ const createEvaluation = async (req, res) => {
 // ================================================
 const createQuestion = async (req, res) => {
   try {
-    const { id } = req.params
+    const { preTestId } = req.params
     const { pertanyaan, options } = req.body
 
     if (!pertanyaan) {
@@ -98,7 +95,7 @@ const createQuestion = async (req, res) => {
       })
     }
 
-    const questionBaru = await evaluationsService.createQuestion(id, {
+    const questionBaru = await preTestsService.createQuestion(preTestId, {
       pertanyaan,
       options
     })
@@ -124,7 +121,7 @@ const updateQuestion = async (req, res) => {
     const { questionId } = req.params
     const { pertanyaan, options } = req.body
 
-    const updatedQuestion = await evaluationsService.updateQuestion(questionId, {
+    const updatedQuestion = await preTestsService.updateQuestion(questionId, {
       pertanyaan,
       options
     })
@@ -148,7 +145,7 @@ const updateQuestion = async (req, res) => {
 const deleteQuestion = async (req, res) => {
   try {
     const { questionId } = req.params
-    const result = await evaluationsService.deleteQuestion(questionId)
+    const result = await preTestsService.deleteQuestion(questionId)
 
     return res.status(200).json({
       sukses: true,
@@ -163,11 +160,31 @@ const deleteQuestion = async (req, res) => {
 }
 
 // ================================================
-// SUBMIT JAWABAN — Guru submit jawaban
+// DELETE PRE-TEST — Hanya admin
 // ================================================
-const submitJawaban = async (req, res) => {
+const deletePreTest = async (req, res) => {
   try {
-    const { id } = req.params
+    const { moduleId, preTestId } = req.params
+    const result = await preTestsService.deletePreTest(moduleId, preTestId)
+
+    return res.status(200).json({
+      sukses: true,
+      pesan: result.pesan
+    })
+  } catch (error) {
+    return res.status(error.statusCode || 400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
+// SUBMIT JAWABAN PRE-TEST — Guru
+// ================================================
+const submitPreTest = async (req, res) => {
+  try {
+    const { preTestId } = req.params
     const { jawaban } = req.body
     const userId = req.user.id
 
@@ -189,7 +206,7 @@ const submitJawaban = async (req, res) => {
       })
     }
 
-    const hasil = await evaluationsService.submitJawaban(id, userId, { jawaban })
+    const hasil = await preTestsService.submitPreTest(preTestId, userId, { jawaban })
 
     return res.status(200).json({
       sukses: true,
@@ -205,12 +222,12 @@ const submitJawaban = async (req, res) => {
 }
 
 // ================================================
-// GET ANSWERS — Admin lihat semua jawaban
+// GET ANSWERS — Admin
 // ================================================
-const getAnswersByEvaluation = async (req, res) => {
+const getAnswersByPreTest = async (req, res) => {
   try {
-    const { id } = req.params
-    const answers = await evaluationsService.getAnswersByEvaluation(id)
+    const { preTestId } = req.params
+    const answers = await preTestsService.getAnswersByPreTest(preTestId)
 
     return res.status(200).json({
       sukses: true,
@@ -226,14 +243,14 @@ const getAnswersByEvaluation = async (req, res) => {
 }
 
 // ================================================
-// GET MY ANSWERS — Guru lihat jawaban sendiri
+// GET MY ANSWERS — Guru
 // ================================================
 const getMyAnswers = async (req, res) => {
   try {
-    const { id } = req.params
+    const { preTestId } = req.params
     const userId = req.user.id
 
-    const hasil = await evaluationsService.getMyAnswers(id, userId)
+    const hasil = await preTestsService.getMyAnswers(preTestId, userId)
 
     return res.status(200).json({
       sukses: true,
@@ -248,13 +265,14 @@ const getMyAnswers = async (req, res) => {
 }
 
 module.exports = {
-  getEvaluationsByModule,
-  getEvaluationById,
-  createEvaluation,
+  getPreTestsByModule,
+  getPreTestById,
+  createPreTest,
   createQuestion,
   updateQuestion,
   deleteQuestion,
-  submitJawaban,
-  getAnswersByEvaluation,
-  getMyAnswers 
+  deletePreTest,
+  submitPreTest,
+  getAnswersByPreTest,
+  getMyAnswers
 }

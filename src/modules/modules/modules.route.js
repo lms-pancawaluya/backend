@@ -6,11 +6,14 @@ const modulesController = require('./modules.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
 const contentsRoute = require('../contents/contents.route')
-const evaluationsRoute = require('../evaluations/evaluations.route')
+const preTestsRoute = require('../pre-tests/pre-tests.route')
+const postTestsRoute = require('../post-tests/post-tests.route')
 
 // Nested routes
 router.use('/:moduleId/contents', contentsRoute)
-router.use('/:moduleId/evaluations', evaluationsRoute)
+// Domain assessment
+router.use('/:moduleId/pre-tests', preTestsRoute)
+router.use('/:moduleId/post-tests', postTestsRoute)
 
 // PUBLIC / GENERAL ROUTES (Harus Login)
 router.get('/', authMiddleware, modulesController.getAllModules)

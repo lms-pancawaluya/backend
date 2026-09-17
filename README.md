@@ -13,6 +13,8 @@ RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi me
 - **jsonwebtoken** dan **bcryptjs** — token autentikasi dan hashing password.
 - **Resend** — pengiriman OTP registrasi dan reset password.
 - **Multer** — unggahan gambar profil serta dokumen RTL PDF.
+- **Cloudinary** — penyimpanan berkas PDF (modul LMS, template & hasil sertifikat).
+- **pdf-lib** — rendering PDF sertifikat (overlay text pada template).
 - **Helmet** dan **CORS** — keamanan header dan akses lintas origin.
 - **Nodemon** — hot reload saat pengembangan.
 
@@ -316,6 +318,29 @@ Course 100% selesai → boleh claim → sertifikat dibuat dari profil user
 - `GET /api/certificates/:id` `(Admin atau Guru)`
   *Deskripsi:* Mengambil detail satu sertifikat. Hanya pemilik (atau admin).
 
+#### Template Sertifikat — `/api/certificates/:courseId/template`
+
+Template PDF berasal dari **file hasil export Canva yang di-upload admin** (backend tidak membuat desain baru, dan **tidak** ada integrasi Canva API). Template disimpan di **Cloudinary** (folder `lms-certificate-templates`, `resource_type: raw`) — **bukan** di local filesystem.
+
+- `POST /api/certificates/:courseId/template` `(Admin)`
+  *Deskripsi:* Upload/update template certificate PDF untuk sebuah course.
+  *Body:* `multipart/form-data`, field `file` (harus `application/pdf`, max 10MB).
+  *Response:* `{ sukses, pesan, data: { id, judul, certificateTemplateUrl, certificateTemplateId } }`.
+  *Ditolak:* `400` bila file bukan PDF / course tidak menyediakan sertifikat, `403` bila bukan hak akses, `404` bila course tidak ada.
+  *Catatan:* Upload ulang akan menimpa template course (public_id tetap), sehingga template terbaru langsung dipakai.
+- `GET /api/certificates/:courseId/template` `(Admin atau Guru)`
+  *Deskripsi:* Mengambil metadata template milik course.
+  *Response:* `{ sukses, data: { courseId, courseName, hasTemplate, templateUrl, templateId, overlay } }`.
+
+#### Generate & Download Sertifikat — `/api/certificates/:id/generate`
+
+- `POST /api/certificates/:id/generate` `(Admin atau Guru)`
+  *Deskripsi:* Menghasilkan PDF sertifikat **personal** dari template course: template PDF dipakai sebagai background, lalu text di-overlay. Data (nama, nomor, tanggal) diambil **dari certificate record** (bukan dari request FE). Hasil PDF di-upload ke Cloudinary (folder `lms-certificates`) dan URL-nya disimpan ke `certificate.fileUrl`, `status` menjadi `generated`.
+  *Query:* `force=true` (opsional) untuk generate ulang secara eksplisit.
+  *Response:* `{ sukses, pesan, status, data }` dengan `status` = `generated` (PDF baru dibuat) atau `already_generated` (sudah ada `fileUrl`, tidak digenerate ulang).
+  *Ditolak:* `400` bila course belum memiliki template (tidak generate), `403` bila bukan pemilik (dan bukan admin), `404` bila certificate tidak ada.
+  *Download:* URL hasil ada di `data.fileUrl`.
+
 #### Aturan Kelayakan (Eligibility)
 
 - **Course 100%** = **seluruh module** pada course tersebut selesai.
@@ -326,7 +351,7 @@ Course 100% selesai → boleh claim → sertifikat dibuat dari profil user
 
 #### Snapshot Nama (`recipientName`)
 
-Nama pada sertifikat diambil dari field `User.nama` (source of truth profil) **pada saat claim** dan disimpan sebagai **snapshot** (`recipientName`). Jika user mengganti nama profil setelah sertifikat diterbitkan, sertifikat lama **tetap** memakai nama saat penerbitan; sertifikat tidak mengandalkan data profil secara live.
+Nama pada sertifikat diambil dari field `User.nama` (source of truth profil) **pada saat claim** dan disimpan sebagai **snapshot** (`recipientName`). Jika user mengganti nama profil setelah sertifikat diterbitkan, sertifikat lama **tetap** memakai nama saat penerbitan; sertifikat tidak mengandalkan data profil secara live. Nama pada PDF hasil generate **selalu** diambil dari snapshot `recipientName` (bukan dari profil live atau request FE).
 
 #### Nomor Sertifikat
 
@@ -336,9 +361,27 @@ Format: `PANC-<TAHUN>-<8 karakter heksadesimal acak>`, contoh `PANC-2026-4F9A2C1
 
 Claim berulang untuk course yang sama **tidak** membuat sertifikat baru, **tidak** membuat nomor baru, dan **tidak** mengubah `issuedAt`; endpoint mengembalikan sertifikat existing dengan `status: "already_claimed"`. Unique constraint `@@unique([userId, courseId])` menjadi safety net saat race condition.
 
-#### Status Template Canva
+Generate berulang untuk certificate yang sudah memiliki `fileUrl` **tidak** membuat PDF baru (mengembalikan `already_generated`) kecuali diminta eksplisit via `force=true`.
 
-Template Canva **belum** tersedia sebagai aset/backend resource, sehingga **generation file PDF/gambar belum diimplementasikan**. Kolom `fileUrl` dan `templateId` sudah disiapkan (nullable) untuk mengakomodasi file hasil template di masa depan. Saat ini sertifikat diterbitkan sebagai **record** dengan `status: "issued"` (belum ada berkas); field `fileUrl` bernilai `null`. Lihat `handoff.md` untuk rincian pekerjaan lanjutan.
+#### Rendering Template (Overlay)
+
+Render memakai **`pdf-lib`** dan mempertahankan **ukuran halaman, orientasi, background, dekorasi, dan layout** template (halaman template tidak diubah; hanya ditambahkan text overlay):
+
+- **Nama penerima (wajib):** di-overlay pada area nama template, **center-aligned**, dengan font **otomatis mengecil** bila nama terlalu panjang agar tidak keluar dari area.
+- **Nomor sertifikat, tanggal penerbitan, nama course (opsional):** di-overlay **hanya bila admin menyediakan posisinya** melalui `Course.certificateOverlay` (Json). Bila tidak disediakan, field ini **tidak** dipaksa masuk agar desain tidak rusak.
+
+Posisi overlay dinyatakan **relatif (persen)** terhadap ukuran halaman (`x`, `y`, `maxWidthPercent`, `fontSize`, `color`, `align`).
+
+**Default positioning usable:** ketika `Course.certificateOverlay` **kosong**, generation tetap memakai **default positioning** yang ditanam di code (`certificate-pdf.service.js`), sehingga admin **tidak perlu** mengisi konfigurasi manual di database agar template yang baru di-upload langsung dapat dipakai. Default disetel mengikuti layout template referensi Canva (landscape, 1 halaman). Field `certificateOverlay` tetap dipertahankan untuk fleksibilitas bila posisi perlu dikustomisasi.
+
+#### Storage
+
+| File | Storage | Folder | Sifat |
+|---|---|---|---|
+| Template certificate | Cloudinary (`raw`) | `lms-certificate-templates/` | dipakai ulang banyak user |
+| Generated certificate | Cloudinary (`raw`) | `lms-certificates/` | personal per certificate |
+
+Kedua file adalah **dua file berbeda**. Template tidak disimpan di local filesystem/backend.
 
 ### Rencana Tindak Lanjut — `/api/rtl`
 - `POST /api/rtl/upload` `(Terautentikasi)`

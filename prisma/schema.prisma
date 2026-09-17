@@ -66,12 +66,12 @@ enum TicketStatus {
 
 enum CourseMode {
   offline // Course Tatap Muka
-  online  // Course Mandiri
+  online // Course Mandiri
 }
 
 enum EvaluationType {
-  pre_test    // Pre-Test Pelatihan
-  post_test   // Post-Test Akhir Pelatihan
+  pre_test // Pre-Test Pelatihan
+  post_test // Post-Test Akhir Pelatihan
   module_eval // Evaluasi per Modul (Kuis Modul)
 }
 
@@ -80,28 +80,28 @@ enum EvaluationType {
 // ==========================================
 
 model User {
-  id           String        @id @default(uuid())
-  nama         String
-  email        String        @unique
-  password     String
-  role         Role          @default(guru)
-  status       UserStatus    @default(aktif) @map("status")
-  nip          String?       @unique @map("nip")
-  sekolah      String?       @map("sekolah")
-  
-  // Relasi ke MasterSekolah untuk School-Scope Otorisasi
-  schoolId     String?        @map("school_id")
-  school       MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  id       String     @id @default(uuid())
+  nama     String
+  email    String     @unique
+  password String
+  role     Role       @default(guru)
+  status   UserStatus @default(aktif) @map("status")
+  nip      String?    @unique @map("nip")
+  sekolah  String?    @map("sekolah")
 
-  kotaKab      String?       @map("kota/kab")
-  kecamatan    String?       @map("kecamatan")
-  noHp         String?       @map("no_hp")
-  fotoProfil   String?       @map("foto_profil")
-  isVerified   Boolean       @default(false) @map("is_verified")
-  otpCode      String?       @map("otp_code")
-  otpExpiresAt DateTime?     @map("otp_expires_at")
-  gelar        String?       @map("gelar")
-  createdAt    DateTime      @default(now()) @map("created_at")
+  // Relasi ke MasterSekolah untuk School-Scope Otorisasi
+  schoolId String?        @map("school_id")
+  school   MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  kotaKab      String?   @map("kota/kab")
+  kecamatan    String?   @map("kecamatan")
+  noHp         String?   @map("no_hp")
+  fotoProfil   String?   @map("foto_profil")
+  isVerified   Boolean   @default(false) @map("is_verified")
+  otpCode      String?   @map("otp_code")
+  otpExpiresAt DateTime? @map("otp_expires_at")
+  gelar        String?   @map("gelar")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
   // Relasi
   courseProgress   user_course_progress[]
@@ -118,34 +118,43 @@ model User {
   certificates     Certificate[]
   createdCourses   Course[]               @relation("UserCreatedCourses")
 
+  // Progress per material
+  contentProgress UserContentProgress[]
+
   @@index([schoolId])
   @@map("users")
 }
 
 model Course {
-  id             String      @id @default(uuid())
+  id             String     @id @default(uuid())
   judul          String
-  deskripsi      String      @db.Text
-  coverUrl       String?     @map("cover_url")
-  mode           CourseMode  @default(online)
-  hasCertificate Boolean     @default(true) @map("has_certificate")
-  
+  deskripsi      String     @db.Text
+  coverUrl       String?    @map("cover_url")
+  mode           CourseMode @default(online)
+  hasCertificate Boolean    @default(true) @map("has_certificate")
+
+  // Certificate Template
+  // Nullable agar course tetap valid meskipun belum memiliki template.
+  certificateTemplateUrl String? @map("certificate_template_url") @db.Text
+  certificateTemplateId  String? @map("certificate_template_id")
+  certificateOverlay     Json?   @map("certificate_overlay")
+
   // Scope & Ownership
   // Jika schoolId = null -> GLOBAL (Dapat diakses oleh semua sekolah & guru)
   // Jika schoolId terisi -> SCOPE SEKOLAH (Khusus untuk pengajar & guru di sekolah terkait)
-  schoolId       String?        @map("school_id")
-  school         MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
-  
-  createdBy      String?        @map("created_by") // User ID pembuat course
-  creator        User?          @relation("UserCreatedCourses", fields: [createdBy], references: [id], onDelete: SetNull)
+  schoolId String?        @map("school_id")
+  school   MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  createdBy String? @map("created_by") // User ID pembuat course
+  creator   User?   @relation("UserCreatedCourses", fields: [createdBy], references: [id], onDelete: SetNull)
 
   // Detail khusus jika mode Offline
   lokasi         String?
-  tanggalMulai   DateTime?   @map("tanggal_mulai")
-  tanggalSelesai DateTime?   @map("tanggal_selesai")
+  tanggalMulai   DateTime? @map("tanggal_mulai")
+  tanggalSelesai DateTime? @map("tanggal_selesai")
 
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relasi
   modules        Module[]
@@ -189,8 +198,9 @@ model Content {
   createdAt DateTime    @default(now()) @map("created_at")
 
   // Relasi
-  module      Module     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  miniQuizzes MiniQuiz[]
+  module       Module                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  miniQuizzes  MiniQuiz[]
+  userProgress UserContentProgress[]
 
   @@index([moduleId])
   @@map("contents")
@@ -222,7 +232,7 @@ model Question {
   createdAt    DateTime     @default(now()) @map("created_at")
 
   // Relasi
-  evaluation Evaluation   @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  evaluation Evaluation     @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
   options    Option[]
   answers    user_answers[]
 
@@ -258,6 +268,46 @@ model user_course_progress {
   @@index([userId])
   @@index([courseId])
   @@map("user_course_progress")
+}
+
+// ==========================================
+// PROGRESS PER MATERIAL
+// ==========================================
+//
+// Digunakan untuk menentukan apakah seluruh
+// material dalam sebuah module sudah selesai.
+//
+// Contoh:
+// Video  -> progress 100 / completed
+// PDF    -> completed
+// Teks   -> completed
+// Link   -> completed
+//
+// Backend yang menentukan completion.
+// FE hanya mengirim progress/completion sesuai
+// endpoint yang telah disediakan.
+//
+
+model UserContentProgress {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  contentId   String    @map("content_id")
+  progress    Int       @default(0)
+  isCompleted Boolean   @default(false) @map("is_completed")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relasi
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  // Satu user hanya memiliki satu progress
+  // untuk satu content.
+  @@unique([userId, contentId])
+  @@index([userId])
+  @@index([contentId])
+  @@map("user_content_progress")
 }
 
 model user_progress {
@@ -324,9 +374,9 @@ model Comment {
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relasi
-  module  Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent  Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  module  Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies Comment[] @relation("CommentReplies")
 
   @@index([moduleId])
@@ -358,18 +408,38 @@ model RtlSubmission {
   @@map("rtl_submissions")
 }
 
+// ==========================================
+// CERTIFICATE
+// ==========================================
+
 model Certificate {
-  id              String   @id @default(uuid())
-  userId          String   @map("user_id")
-  courseId        String   @map("course_id")
-  nomorSertifikat String   @unique @map("nomor_sertifikat")
-  fileUrl         String   @map("file_url") @db.Text
-  issuedAt        DateTime @default(now()) @map("issued_at")
+  id              String @id @default(uuid())
+  userId          String @map("user_id")
+  courseId        String @map("course_id")
+  nomorSertifikat String @unique @map("nomor_sertifikat")
+
+  // Nullable karena certificate dapat di-claim
+  // sebelum file PDF berhasil di-generate.
+  fileUrl String? @map("file_url") @db.Text
+
+  issuedAt DateTime @default(now()) @map("issued_at")
+
+  // Metadata certificate
+  // Nama penerima disimpan sebagai snapshot agar
+  // perubahan nama profile setelah certificate dibuat
+  // tidak mengubah certificate yang sudah diterbitkan.
+  recipientName String   @map("recipient_name")
+  templateId    String?  @map("template_id")
+  status        String   @default("issued") @map("status")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   // Relasi
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
+  // Satu user hanya boleh memiliki satu
+  // certificate untuk satu course.
+  @@unique([userId, courseId])
   @@index([userId])
   @@index([courseId])
   @@map("certificates")
@@ -501,8 +571,8 @@ model MasterSekolah {
   createdAt     DateTime @default(now()) @map("created_at")
 
   // Relasi ke User dan Course
-  users         User[]
-  courses       Course[]
+  users   User[]
+  courses Course[]
 
   @@map("master_sekolah")
 }

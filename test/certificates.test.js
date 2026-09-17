@@ -120,12 +120,27 @@ const progressPath = path.resolve(
   __dirname,
   '../src/modules/progress/progress.service.js'
 )
+// upload.service & certificate-pdf.service di-mock agar modul certificates
+// dapat di-require tanpa menyentuh konfigurasi storage (Supabase/Cloudinary).
+const uploadPath = path.resolve(
+  __dirname,
+  '../src/modules/upload/upload.service.js'
+)
+const pdfPath = path.resolve(
+  __dirname,
+  '../src/modules/certificates/certificate-pdf.service.js'
+)
+
+const mockUploadService = {}
+const mockPdfService = {}
 
 const originalLoad = Module._load
 Module._load = function (request, parent, isMain) {
   const resolved = Module._resolveFilename(request, parent, isMain)
   if (resolved === dbPath) return mockPrisma
   if (resolved === progressPath) return mockProgressService
+  if (resolved === uploadPath) return mockUploadService
+  if (resolved === pdfPath) return mockPdfService
   return originalLoad.apply(this, arguments)
 }
 

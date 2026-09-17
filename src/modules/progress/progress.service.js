@@ -6,6 +6,12 @@ const prisma = require('../../config/database')
 // HELPER — Hitung status completion PER TAHAP
 // (Pre-Test -> Learning Material -> Post-Test)
 //
+// Contract FE:
+// - Pre-Test belum selesai -> FE mengunci Material & Post-Test.
+// - Pre-Test selesai -> Material terbuka.
+// - Material belum selesai -> FE mengunci Post-Test.
+// - Material selesai -> Post-Test terbuka.
+//
 // Definisi:
 // - preTestCompleted:
 //   module tidak punya pre-test ATAU guru sudah submit pre-test
@@ -17,7 +23,7 @@ const prisma = require('../../config/database')
 //
 //   Completion per material:
 //   1. Content TANPA mini-quiz:
-//      - video  => progressPercent >= 100 ATAU isCompleted = true
+//      - video       => progress >= 100 ATAU isCompleted = true
 //      - teks/pdf/link => isCompleted = true
 //
 //   2. Content DENGAN mini-quiz:
@@ -28,10 +34,11 @@ const prisma = require('../../config/database')
 //
 // - postTestCompleted:
 //   module tidak punya post-test ATAU skor utama guru
-//   (user_progress.skor) sudah >= passingScore post-test.
+//   (user_progress.skor) sudah >= passingScore.
 //
 // Catatan:
 // - Membuka halaman TIDAK dianggap selesai.
+// - Klik tombol biasa TIDAK dianggap selesai.
 // - Record my-answers TIDAK dianggap selesai untuk material.
 // - Material non-mini-quiz hanya selesai bila tercatat eksplisit
 //   di user_content_progress.
@@ -53,11 +60,13 @@ const hitungStageCompletion = async (userId, moduleIds) => {
         in: moduleIds
       }
     },
+
     select: {
       id: true,
       moduleId: true,
       tipe: true,
       passingScore: true,
+
       questions: {
         select: {
           id: true
@@ -69,27 +78,32 @@ const hitungStageCompletion = async (userId, moduleIds) => {
   // ================================================
   // 2. Ambil jawaban guru untuk evaluasi terkait
   // ================================================
-  const evaluationIds = evaluations.map((evaluation) => evaluation.id)
+  const evaluationIds = evaluations.map(
+    (evaluation) => evaluation.id
+  )
 
-  const answers = evaluationIds.length > 0
-    ? await prisma.user_answers.findMany({
-        where: {
-          userId,
-          question: {
-            evaluationId: {
-              in: evaluationIds
+  const answers =
+    evaluationIds.length > 0
+      ? await prisma.user_answers.findMany({
+          where: {
+            userId,
+
+            question: {
+              evaluationId: {
+                in: evaluationIds
+              }
+            }
+          },
+
+          select: {
+            question: {
+              select: {
+                evaluationId: true
+              }
             }
           }
-        },
-        select: {
-          question: {
-            select: {
-              evaluationId: true
-            }
-          }
-        }
-      })
-    : []
+        })
+      : []
 
   // Set evaluationId yang sudah memiliki minimal
   // satu jawaban dari guru ini.
@@ -113,6 +127,7 @@ const hitungStageCompletion = async (userId, moduleIds) => {
         in: moduleIds
       }
     },
+
     select: {
       id: true,
       moduleId: true,
@@ -127,6 +142,7 @@ const hitungStageCompletion = async (userId, moduleIds) => {
               userId,
               isLolos: true
             },
+
             select: {
               id: true
             }
@@ -138,9 +154,10 @@ const hitungStageCompletion = async (userId, moduleIds) => {
         where: {
           userId
         },
+
         select: {
+          progress: true,
           isCompleted: true,
-          progressPercent: true,
           completedAt: true
         }
       }
@@ -154,10 +171,12 @@ const hitungStageCompletion = async (userId, moduleIds) => {
   const progress = await prisma.user_progress.findMany({
     where: {
       userId,
+
       moduleId: {
         in: moduleIds
       }
     },
+
     select: {
       moduleId: true,
       skor: true
@@ -190,9 +209,13 @@ const hitungStageCompletion = async (userId, moduleIds) => {
 
     // ================================================
     // PRE-TEST
+    //
+    // Edge case:
+    // Tidak ada Pre-Test -> Material langsung terbuka.
     // ================================================
     const preTestCompleted =
-      !preTest || evaluationDijawab.has(preTest.id)
+      !preTest ||
+      evaluationDijawab.has(preTest.id)
 
     // ================================================
     // MATERIAL
@@ -204,12 +227,14 @@ const hitungStageCompletion = async (userId, moduleIds) => {
     let completedContents = 0
 
     const materialDetail = modulContents.map((content) => {
-      const adaMiniQuiz = content.miniQuizzes.length > 0
+      const adaMiniQuiz =
+        content.miniQuizzes.length > 0
 
       // --------------------------------------------
       // Material/content completion
       // --------------------------------------------
-      const contentProg = content.contentProgress[0] || null
+      const contentProg =
+        content.contentProgress[0] || null
 
       let progressSelesai = false
 
@@ -218,10 +243,10 @@ const hitungStageCompletion = async (userId, moduleIds) => {
           // Video selesai bila:
           // - isCompleted sudah true
           // ATAU
-          // - progressPercent sudah mencapai 100.
+          // - progress sudah mencapai 100.
           progressSelesai =
             contentProg.isCompleted === true ||
-            (contentProg.progressPercent ?? 0) >= 100
+            (contentProg.progress ?? 0) >= 100
         } else {
           // Teks / PDF / Link:
           // harus explicitly ditandai completed.
@@ -238,9 +263,11 @@ const hitungStageCompletion = async (userId, moduleIds) => {
       if (adaMiniQuiz) {
         // SEMUA mini-quiz harus memiliki minimal
         // satu attempt yang lulus.
-        miniQuizLulus = content.miniQuizzes.every(
-          (miniQuiz) => miniQuiz.attempts.length > 0
-        )
+        miniQuizLulus =
+          content.miniQuizzes.every(
+            (miniQuiz) =>
+              miniQuiz.attempts.length > 0
+          )
       }
 
       // --------------------------------------------
@@ -269,12 +296,17 @@ const hitungStageCompletion = async (userId, moduleIds) => {
         tipe: content.tipe,
         hasMiniQuiz: adaMiniQuiz,
         isCompleted,
-        progressPercent: contentProg?.progressPercent ?? 0
+        progressPercent: contentProg?.progress ?? 0
       }
     })
 
     // ================================================
     // MATERIAL STAGE
+    //
+    // Edge case:
+    // Tidak ada Learning Material ->
+    // Material dianggap selesai sehingga Post-Test
+    // langsung terbuka.
     // ================================================
     const totalContents = modulContents.length
 
@@ -285,8 +317,12 @@ const hitungStageCompletion = async (userId, moduleIds) => {
 
     // ================================================
     // POST-TEST
+    //
+    // Edge case:
+    // Tidak ada Post-Test -> dianggap selesai.
     // ================================================
-    const passingScore = postTest?.passingScore ?? 80
+    const passingScore =
+      postTest?.passingScore ?? 80
 
     const postTestCompleted = !postTest
       ? true
@@ -320,6 +356,7 @@ const getProgress = async (userId) => {
     where: {
       userId
     },
+
     select: {
       id: true,
       status: true,
@@ -355,29 +392,38 @@ const getProgress = async (userId) => {
     .map((item) => item.module?.id)
     .filter(Boolean)
 
-  const stageMap = await hitungStageCompletion(
-    userId,
-    moduleIds
-  )
+  const stageMap =
+    await hitungStageCompletion(
+      userId,
+      moduleIds
+    )
 
   return progress.map((item) => {
-    const stage = stageMap[item.module?.id] || {
-      preTestCompleted: false,
-      materialCompleted: false,
-      postTestCompleted: false,
-      materialProgress: {
-        total: 0,
-        completed: 0
-      },
-      materialDetail: []
-    }
+    const stage =
+      stageMap[item.module?.id] || {
+        preTestCompleted: false,
+        materialCompleted: false,
+        postTestCompleted: false,
+
+        materialProgress: {
+          total: 0,
+          completed: 0
+        },
+
+        materialDetail: []
+      }
 
     return {
       ...item,
 
-      preTestCompleted: stage.preTestCompleted,
-      materialCompleted: stage.materialCompleted,
-      postTestCompleted: stage.postTestCompleted,
+      preTestCompleted:
+        stage.preTestCompleted,
+
+      materialCompleted:
+        stage.materialCompleted,
+
+      postTestCompleted:
+        stage.postTestCompleted,
 
       materialProgress:
         stage.materialProgress || {
@@ -414,16 +460,18 @@ const getSummary = async (userId) => {
   // ================================================
   // 2. Ambil progress guru
   // ================================================
-  const userProgress = await prisma.user_progress.findMany({
-    where: {
-      userId
-    },
-    select: {
-      moduleId: true,
-      status: true,
-      completedAt: true
-    }
-  })
+  const userProgress =
+    await prisma.user_progress.findMany({
+      where: {
+        userId
+      },
+
+      select: {
+        moduleId: true,
+        status: true,
+        completedAt: true
+      }
+    })
 
   // ================================================
   // 3. Gabungkan module dengan progress
@@ -435,8 +483,10 @@ const getSummary = async (userId) => {
 
     return {
       ...module,
-      status: progress?.status || 'belum_mulai',
-      completedAt: progress?.completedAt || null
+      status:
+        progress?.status || 'belum_mulai',
+      completedAt:
+        progress?.completedAt || null
     }
   })
 
@@ -449,9 +499,11 @@ const getSummary = async (userId) => {
     (item) => item.status === 'selesai'
   ).length
 
-  const sedangBelajar = userProgress.filter(
-    (item) => item.status === 'sedang_belajar'
-  ).length
+  const sedangBelajar =
+    userProgress.filter(
+      (item) =>
+        item.status === 'sedang_belajar'
+    ).length
 
   const belumMulai =
     totalModul - selesai - sedangBelajar
@@ -465,7 +517,9 @@ const getSummary = async (userId) => {
 
       persentaseSelesai:
         totalModul > 0
-          ? Math.round((selesai / totalModul) * 100)
+          ? Math.round(
+              (selesai / totalModul) * 100
+            )
           : 0
     },
 
@@ -476,18 +530,24 @@ const getSummary = async (userId) => {
 // ================================================
 // START MODULE — Mulai belajar modul
 // ================================================
-const startModule = async (userId, moduleId) => {
+const startModule = async (
+  userId,
+  moduleId
+) => {
   // ================================================
   // Cek module
   // ================================================
-  const moduleAda = await prisma.module.findUnique({
-    where: {
-      id: moduleId
-    }
-  })
+  const moduleAda =
+    await prisma.module.findUnique({
+      where: {
+        id: moduleId
+      }
+    })
 
   if (!moduleAda) {
-    throw new Error('Modul tidak ditemukan')
+    throw new Error(
+      'Modul tidak ditemukan'
+    )
   }
 
   // ================================================
@@ -515,24 +575,25 @@ const startModule = async (userId, moduleId) => {
   // ================================================
   // Upsert progress
   // ================================================
-  const progress = await prisma.user_progress.upsert({
-    where: {
-      userId_moduleId: {
+  const progress =
+    await prisma.user_progress.upsert({
+      where: {
+        userId_moduleId: {
+          userId,
+          moduleId
+        }
+      },
+
+      update: {
+        status: 'sedang_belajar'
+      },
+
+      create: {
         userId,
-        moduleId
+        moduleId,
+        status: 'sedang_belajar'
       }
-    },
-
-    update: {
-      status: 'sedang_belajar'
-    },
-
-    create: {
-      userId,
-      moduleId,
-      status: 'sedang_belajar'
-    }
-  })
+    })
 
   return progress
 }
@@ -540,24 +601,34 @@ const startModule = async (userId, moduleId) => {
 // ================================================
 // COMPLETE MODULE — Tandai module selesai
 //
-// NOTE:
-// Function ini masih mempertahankan behavior existing.
-// Stage gate Pre-Test -> Material -> Post-Test
-// sebaiknya ditangani sebagai follow-up terpisah
-// bila endpoint ini memang harus menjadi enforcement gate.
+// Behavior existing tetap dipertahankan.
+//
+// Catatan:
+// Status stage Pre-Test -> Material -> Post-Test
+// digunakan sebagai contract FE untuk menentukan
+// lock/unlock di dalam module.
+//
+// Endpoint complete module tidak digunakan untuk
+// menentukan completion setiap stage.
 // ================================================
-const completeModule = async (userId, moduleId) => {
+const completeModule = async (
+  userId,
+  moduleId
+) => {
   // ================================================
   // Cek module
   // ================================================
-  const moduleAda = await prisma.module.findUnique({
-    where: {
-      id: moduleId
-    }
-  })
+  const moduleAda =
+    await prisma.module.findUnique({
+      where: {
+        id: moduleId
+      }
+    })
 
   if (!moduleAda) {
-    throw new Error('Modul tidak ditemukan')
+    throw new Error(
+      'Modul tidak ditemukan'
+    )
   }
 
   // ================================================
@@ -565,26 +636,27 @@ const completeModule = async (userId, moduleId) => {
   // ================================================
   const now = new Date()
 
-  const progress = await prisma.user_progress.upsert({
-    where: {
-      userId_moduleId: {
+  const progress =
+    await prisma.user_progress.upsert({
+      where: {
+        userId_moduleId: {
+          userId,
+          moduleId
+        }
+      },
+
+      update: {
+        status: 'selesai',
+        completedAt: now
+      },
+
+      create: {
         userId,
-        moduleId
+        moduleId,
+        status: 'selesai',
+        completedAt: now
       }
-    },
-
-    update: {
-      status: 'selesai',
-      completedAt: now
-    },
-
-    create: {
-      userId,
-      moduleId,
-      status: 'selesai',
-      completedAt: now
-    }
-  })
+    })
 
   return progress
 }
@@ -621,21 +693,25 @@ const getProgressByModule = async (
     })
 
   // Hitung stage untuk module ini
-  const stageMap = await hitungStageCompletion(
-    userId,
-    [moduleId]
-  )
+  const stageMap =
+    await hitungStageCompletion(
+      userId,
+      [moduleId]
+    )
 
-  const stage = stageMap[moduleId] || {
-    preTestCompleted: false,
-    materialCompleted: false,
-    postTestCompleted: false,
-    materialProgress: {
-      total: 0,
-      completed: 0
-    },
-    materialDetail: []
-  }
+  const stage =
+    stageMap[moduleId] || {
+      preTestCompleted: false,
+      materialCompleted: false,
+      postTestCompleted: false,
+
+      materialProgress: {
+        total: 0,
+        completed: 0
+      },
+
+      materialDetail: []
+    }
 
   // ================================================
   // Jika belum memiliki user_progress
@@ -728,7 +804,9 @@ const markContentComplete = async (
     })
 
   if (!content) {
-    throw new Error('Konten tidak ditemukan')
+    throw new Error(
+      'Konten tidak ditemukan'
+    )
   }
 
   // ================================================
@@ -746,7 +824,7 @@ const markContentComplete = async (
       })
 
     const percent =
-      existing?.progressPercent ?? 0
+      existing?.progress ?? 0
 
     if (percent < 100) {
       throw new Error(
@@ -771,7 +849,7 @@ const markContentComplete = async (
 
       update: {
         isCompleted: true,
-        progressPercent: 100,
+        progress: 100,
         completedAt: now
       },
 
@@ -779,7 +857,7 @@ const markContentComplete = async (
         userId,
         contentId,
         isCompleted: true,
-        progressPercent: 100,
+        progress: 100,
         completedAt: now
       }
     })
@@ -787,7 +865,9 @@ const markContentComplete = async (
   return {
     contentId,
     tipe: content.tipe,
-    ...saved
+    progressPercent: saved.progress,
+    isCompleted: saved.isCompleted,
+    completedAt: saved.completedAt
   }
 }
 
@@ -795,6 +875,14 @@ const markContentComplete = async (
 // UPDATE CONTENT PROGRESS
 //
 // Digunakan terutama untuk video.
+//
+// API contract FE:
+// {
+//   "progressPercent": 0-100
+// }
+//
+// Database:
+// progress
 //
 // Rules:
 // - progress harus integer 0-100.
@@ -831,7 +919,9 @@ const updateContentProgress = async (
     })
 
   if (!content) {
-    throw new Error('Konten tidak ditemukan')
+    throw new Error(
+      'Konten tidak ditemukan'
+    )
   }
 
   // ================================================
@@ -870,7 +960,7 @@ const updateContentProgress = async (
   // tetap gunakan 70.
   // ================================================
   const currentPercent =
-    existing?.progressPercent ?? 0
+    existing?.progress ?? 0
 
   const nilaiFinal =
     Math.max(currentPercent, nilai)
@@ -910,7 +1000,7 @@ const updateContentProgress = async (
       },
 
       update: {
-        progressPercent: nilaiFinal,
+        progress: nilaiFinal,
         isCompleted,
         completedAt
       },
@@ -918,7 +1008,7 @@ const updateContentProgress = async (
       create: {
         userId,
         contentId,
-        progressPercent: nilaiFinal,
+        progress: nilaiFinal,
         isCompleted,
         completedAt
       }
@@ -927,7 +1017,9 @@ const updateContentProgress = async (
   return {
     contentId,
     tipe: content.tipe,
-    ...saved
+    progressPercent: saved.progress,
+    isCompleted: saved.isCompleted,
+    completedAt: saved.completedAt
   }
 }
 
@@ -942,7 +1034,9 @@ module.exports = {
   getProgressByModule,
   markContentComplete,
   updateContentProgress,
-  // Diekspor agar modul lain (mis. certificate) dapat memakai
-  // logic completion per-stage yang sama sebagai single source of truth.
+
+  // Diekspor agar modul lain (mis. certificate)
+  // dapat memakai logic completion per-stage yang sama
+  // sebagai single source of truth.
   hitungStageCompletion
 }

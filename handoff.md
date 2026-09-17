@@ -479,4 +479,212 @@ menerapkan: pada environment dengan skema `courses` yang benar, jalankan
 Migration additive: rollback aman = `DROP TABLE "certificates";` (manual, tidak
 dijalankan). Tidak ada data existing yang terpengaruh.
 
+<br />
+
+# Iterasi 4 — Certificate Template & PDF Generation
+
+## 32. Latar Belakang (Iterasi 4)
+
+Iterasi 3 hanya menerbitkan sertifikat sebagai **record** (`fileUrl` = `null`)
+karena template Canva belum tersedia. Iterasi 4 mengaktifkan alur berkas:
+admin meng-upload **template PDF hasil export Canva** per course, backend
+meng-overlay data certificate ke template, menghasilkan **PDF personal**, dan
+menyimpan URL-nya.
+
+**Bukan** integrasi Canva API. Backend hanya memakai file PDF yang diunggah.
+
+## 33. Audit Existing (Iterasi 4)
+
+| Aspek | Temuan |
+|---|---|
+| Model `Course` | Belum punya field template certificate → perlu 3 kolom additive. |
+| Model `Certificate` | Sudah punya `fileUrl`, `templateId`, `status` (dari Iterasi 3) — tidak perlu diubah. |
+| Storage existing | Cloudinary (dipakai `uploadPdfModul` via `resource_type: raw`) & Supabase Storage. |
+| PDF/image lib | **Tidak ada** → `pdf-lib` ditambahkan (pure-JS, tanpa native dep). |
+| Pola upload | `multer.memoryStorage()` → service upload → simpan URL (`upload.route.js`). |
+| Authorization | `authMiddleware` + `roleMiddleware`; school-scope mengikuti `courses.service` & `pastikanAksesCourse`. |
+
+## 34. Perubahan Schema (Iterasi 4) — additive
+
+Model `Course` — 3 kolom baru (semua nullable, tidak mengubah kolom existing):
+
+```prisma
+certificateTemplateUrl String? @map("certificate_template_url") @db.Text
+certificateTemplateId  String? @map("certificate_template_id")
+certificateOverlay     Json?   @map("certificate_overlay")
+```
+
+Migration: `prisma/migrations/20260916150147_add_course_certificate_template/migration.sql`
+(hanya `ALTER TABLE "courses" ADD COLUMN` ×3; **tanpa** DROP/TRUNCATE/DELETE;
+**tidak** menyentuh tabel/migration existing).
+
+Model `Certificate` **tidak diubah**.
+
+## 35. Dependency Baru
+
+- **`pdf-lib@1.17.1`** — diperlukan untuk memuat template PDF sebagai background
+  dan menggambar text overlay. Ini satu-satunya library yang memenuhi kebutuhan
+  (alternatif seperti `puppeteer`/`sharp`/`canvas` butuh native dependency /
+  browser headless, jauh lebih berat). Tidak ada integration eksternal baru.
+
+## 36. Contract Fitur (Iterasi 4)
+
+- **Template** = file PDF hasil export Canva yang di-upload admin; dipakai ulang
+  banyak user. **Hasil certificate** = PDF personal per certificate. Dua file
+  berbeda, disimpan di folder Cloudinary berbeda.
+- **Storage** (Cloudinary, `resource_type: raw`):
+  - template → `lms-certificate-templates/template-<courseId>`
+  - hasil → `lms-certificates/certificate-<nomorSertifikat>`
+- **Tidak** menyimpan file di local filesystem/backend.
+- **Overlay** mempertahankan ukuran halaman, orientasi, background, dekorasi,
+  dan layout template (halaman template tidak diubah).
+  - Nama penerima **wajib** di-overlay; font **auto-shrink** bila kepanjangan.
+  - Nomor / tanggal / nama course di-overlay **hanya bila** posisinya
+    disediakan (`Course.certificateOverlay`); tidak dipaksa masuk.
+  - Posisi memakai koordinat relatif (persen), default wajar untuk nama.
+- **Data personal** (nama, nomor, tanggal) **selalu** dari certificate record —
+  bukan dari request FE / profil live.
+- **Idempotency generate**: jika `fileUrl` sudah ada → `already_generated`
+  (tidak render ulang); `force=true` untuk generate ulang eksplisit.
+- **Course tanpa template** → generate ditolak (`400`), tidak menghasilkan file.
+- **Authorization**: admin bebas; non-admin dibatasi school-scope. User hanya
+  dapat mengakses/generate certificate miliknya (kecuali admin).
+
+## 37. Endpoint Baru (Iterasi 4)
+
+- `POST /api/certificates/:courseId/template` `(Admin)` — upload/update template
+  (`multipart/form-data`, field `file`, PDF ≤10MB).
+- `GET /api/certificates/:courseId/template` `(Admin atau Guru)` — metadata
+  template course.
+- `POST /api/certificates/:id/generate` `(Admin atau Guru)` — generate PDF
+  personal (`?force=true` opsional). Status: `generated` | `already_generated`.
+
+Semua memakai pola response `{ sukses, pesan, data }` dan error `error.statusCode`.
+
+## 38. Edge Case (Iterasi 4)
+
+| # | Kondisi | Perilaku |
+|---|---|---|
+| 1 | Course belum punya template | generate `400` (tidak generate) |
+| 2 | `certificate.fileUrl` sudah ada | `already_generated`, tidak render ulang |
+| 3 | `force=true` | render ulang & overwrite `fileUrl` |
+| 4 | Certificate milik user lain | `403` |
+| 5 | Certificate/course tidak ada | `404` |
+| 6 | Upload non-PDF | ditolak (400 / filter multer) |
+| 7 | Nama sangat panjang | font auto-shrink agar muat |
+| 8 | Overlay config kosong | default wajar untuk nama; field opsional tidak dipaksa |
+
+## 39. File yang Diubah / Ditambah (Iterasi 4)
+
+Ditambah:
+- `src/modules/certificates/certificate-pdf.service.js`
+- `prisma/migrations/20260916150147_add_course_certificate_template/migration.sql`
+- `test/certificate-generation.test.js`
+
+Diubah:
+- `prisma/schema.prisma` — model `Course` (3 kolom additive).
+- `src/modules/certificates/certificates.service.js` — tambah
+  `uploadCertificateTemplate`, `getCertificateTemplate`, `generateCertificate`.
+- `src/modules/certificates/certificates.controller.js` — tambah handler.
+- `src/modules/certificates/certificates.route.js` — tambah 3 route + multer.
+- `src/modules/upload/upload.service.js` — tambah fungsi upload template,
+  upload hasil, download buffer.
+- `test/certificates.test.js` — mock `upload.service` & `certificate-pdf.service`
+  (agar modul tetap bisa di-require tanpa konfigurasi storage).
+- `package.json` — dependency `pdf-lib`, script `test:certgen`.
+- `README.md` & `handoff.md`.
+
+**Tidak diubah:** logic progress/eligibility/claim (Iterasi 1–3), migration lama.
+
+## 40. Testing (Iterasi 4)
+
+Standalone, tanpa menyentuh DB/storage (Prisma, progress.service, upload.service,
+& certificate-pdf.service di-mock):
+
+```
+node test/certificate-generation.test.js   # atau: npm run test:certgen
+```
+
+Hasil: **15 PASS, 0 FAIL** — mencakup: admin upload template, template tersimpan
+di storage, template terhubung ke course, upload non-PDF ditolak, non-admin
+school-scope ditolak (403), course tanpa template ditolak (400), generate sukses
+memakai template, `recipientName` dari snapshot, hasil tersimpan + `fileUrl`
+terisi, certificate user lain ditolak (403), `fileUrl` ada → tidak generate ulang,
+`force=true` generate ulang, certificate/course tidak ada (404), overlay config
+diteruskan.
+
+Regresi: `node test/certificates.test.js` → **18 PASS, 0 FAIL** (tidak berubah).
+
+Verifikasi tambahan (non-destruktif):
+- `npx prisma validate` → valid.
+- `npx prisma generate` → sukses.
+- `pdf-lib` render uji: halaman & ukuran template dipertahankan.
+- Boot `src/index.js` → server berjalan; route terdaftar dengan urutan benar.
+- Migration SQL diperiksa: hanya 3 `ADD COLUMN`.
+- **Tidak** menjalankan `prisma migrate`/`db push`/`reset`/`seed` terhadap DB.
+
+## 41. Batasan Environment (Iterasi 4)
+
+Sama seperti Iterasi 3: migration **tidak dijalankan** ke DB (hanya file). Untuk
+menerapkan: `npx prisma migrate deploy` pada environment dengan skema `courses`
+yang benar.
+
+## 42. Cara Rollback Migration (Iterasi 4)
+
+Additive: rollback aman = `ALTER TABLE "courses" DROP COLUMN ...` untuk 3 kolom
+baru (manual, tidak dijalankan). Tidak ada data existing yang terpengaruh.
+
+<br />
+
+# Iterasi 5 — Default Positioning Overlay (Fix)
+
+## 43. Latar Belakang (Iterasi 5)
+
+Iterasi 4 memakai default overlay `name.y = 0.42`, `fontSize = 48`. Nilai ini
+mengharuskan admin menyesuaikan `certificateOverlay` manual agar nama jatuh tepat
+di area nama template. Iterasi 5 menyetel **default positioning usable** di code
+sehingga template yang baru di-upload langsung dapat dipakai **tanpa konfigurasi
+manual di database**.
+
+## 44. Perubahan (Iterasi 5) — hanya default positioning
+
+- `DEFAULT_OVERLAY.name` di `certificate-pdf.service.js` disetel mengikuti layout
+  template referensi Canva **"Oranye Merah Minimalist Organic Certificate of
+  Recognition.pdf"** (1 halaman, landscape 842.25 × 595.5 pt):
+  - `x = 0.5` (center horizontal)
+  - `y = 0.535` (area nama template)
+  - `fontSize = 44`, `maxWidthPercent = 0.7`, `align = 'center'`
+- Auto-shrink font tetap (nama panjang mengecil agar tidak overflow).
+- `certificateOverlay` **tetap dipertahankan** untuk future flexibility; bila
+  diisi, konfigurasi custom tetap dihormati (diverifikasi test).
+- Elemen opsional (nomor/tanggal/course) **tidak** dipaksa; hanya di-overlay bila
+  ada konfigurasinya.
+
+**Tidak diubah:** eligibility, claim, flow upload template, schema, route, storage.
+
+## 45. Testing (Iterasi 5)
+
+Test baru: `test/certificate-pdf.test.js` (**5 PASS, 0 FAIL**), memakai pdf-lib
+asli dengan template landscape syntetis:
+
+- Template tanpa `certificateOverlay` tetap menghasilkan PDF.
+- Hasil 1 halaman landscape (background template dipertahankan).
+- `recipientName` memakai default positioning (center).
+- Nama panjang auto-shrink & lebar text ≤ area (tidak overflow).
+- `certificateOverlay` custom tetap dihormati.
+
+Regresi: `certificates.test.js` **18 PASS**, `certificate-generation.test.js`
+**15 PASS**.
+
+Verifikasi tambahan: render langsung memakai template referensi Canva →
+1 halaman landscape, background/dekorasi utuh, nama center di area yang benar.
+
+## 46. Files Changed (Iterasi 5)
+
+- `src/modules/certificates/certificate-pdf.service.js` — default positioning +
+  ekspor `DEFAULT_OVERLAY` & `fitFontSize` untuk pengujian.
+- `test/certificate-pdf.test.js` — **baru**.
+- `package.json` — script `test:certpdf`.
+- `README.md` & `handoff.md`.
+
 

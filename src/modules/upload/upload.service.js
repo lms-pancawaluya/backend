@@ -83,6 +83,91 @@ const uploadPdfModul = async (file) => {
 }
 
 // ================================================
+// UPLOAD TEMPLATE SERTIFIKAT (PDF) — Cloudinary
+//
+// Template PDF hasil export Canva yang di-upload admin.
+// Disimpan di folder terpisah dari sertifikat personal.
+// Mengembalikan { url, publicId } agar Course dapat
+// menyimpan referensi template-nya.
+// ================================================
+const uploadCertificateTemplate = async (file, courseId) => {
+  if (file.mimetype !== 'application/pdf') {
+    throw new Error('Template sertifikat wajib berformat PDF!')
+  }
+
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'lms-certificate-templates',
+        resource_type: 'raw',
+        public_id: `template-${courseId}`,
+        overwrite: true
+      },
+      (error, result) => {
+        if (error) {
+          return reject(
+            new Error(`Upload template gagal: ${error.message}`)
+          )
+        }
+        resolve({
+          url: result.secure_url,
+          publicId: result.public_id
+        })
+      }
+    )
+    stream.end(file.buffer)
+  })
+}
+
+// ================================================
+// UPLOAD SERTIFIKAT PERSONAL (PDF) — Cloudinary
+//
+// Hasil generate PDF personal per certificate.
+// public_id memakai nomor sertifikat agar unik.
+// ================================================
+const uploadCertificateFile = async (pdfBuffer, certificateNumber) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'lms-certificates',
+        resource_type: 'raw',
+        public_id: `certificate-${certificateNumber}`,
+        overwrite: true
+      },
+      (error, result) => {
+        if (error) {
+          return reject(
+            new Error(`Upload sertifikat gagal: ${error.message}`)
+          )
+        }
+        resolve(result.secure_url)
+      }
+    )
+    stream.end(pdfBuffer)
+  })
+}
+
+// ================================================
+// DOWNLOAD FILE (Buffer) dari URL
+//
+// Dipakai untuk mengambil template PDF dari Cloudinary
+// sebelum di-render. Node 18+ menyediakan fetch global.
+// ================================================
+const downloadFileBuffer = async (url) => {
+  const response = await fetch(url)
+
+  if (!response.ok) {
+    throw new Error(
+      `Gagal mengambil file (${response.status})`
+    )
+  }
+
+  const arrayBuffer = await response.arrayBuffer()
+
+  return Buffer.from(arrayBuffer)
+}
+
+// ================================================
 // DELETE FILE dari Storage
 // ================================================
 const deleteFile = async (bucket, filePath) => {
@@ -101,5 +186,8 @@ module.exports = {
   uploadFotoProfil,
   uploadRtl,
   uploadPdfModul, // Export fungsi baru
+  uploadCertificateTemplate,
+  uploadCertificateFile,
+  downloadFileBuffer,
   deleteFile
 }

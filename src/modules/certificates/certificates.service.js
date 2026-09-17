@@ -2,6 +2,8 @@
 
 const prisma = require('../../config/database')
 const progressService = require('../progress/progress.service')
+const uploadService = require('../upload/upload.service')
+const pdfService = require('./certificate-pdf.service')
 
 // ================================================
 // HELPER — Error dengan status code HTTP
@@ -392,12 +394,265 @@ const claimCertificate = async (userId, courseId) => {
 }
 
 // ================================================
+// UPLOAD / UPDATE TEMPLATE CERTIFICATE COURSE
+//
+// Template PDF (hasil export Canva) di-upload admin
+// dan disimpan di storage existing (Cloudinary).
+//
+// - Tidak disimpan di local filesystem.
+// - Terhubung ke course via kolom template di Course.
+// - Course yang sudah punya template -> overwrite
+//   (public_id tetap sama, sehingga URL template
+//   di course di-refresh).
+//
+// Authorization mengikuti pola existing:
+// - admin: bebas.
+// - non-admin: hanya course pada sekolahnya
+//   (school-scope, sama seperti courses.service).
+// ================================================
+const uploadCertificateTemplate = async (
+  courseId,
+  file,
+  user
+) => {
+  if (!file) {
+    throw createError(
+      'File template PDF wajib diunggah',
+      400
+    )
+  }
+
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: {
+      id: true,
+      judul: true,
+      schoolId: true,
+      hasCertificate: true
+    }
+  })
+
+  if (!course) {
+    throw createError('Course tidak ditemukan', 404)
+  }
+
+  // Authorization (school-scope, pola existing).
+  pastikanAksesCourse(course, user)
+
+  if (!course.hasCertificate) {
+    throw createError(
+      'Course ini tidak menyediakan sertifikat',
+      400
+    )
+  }
+
+  // Upload template ke Cloudinary.
+  const { url, publicId } =
+    await uploadService.uploadCertificateTemplate(
+      file,
+      courseId
+    )
+
+  const updated = await prisma.course.update({
+    where: { id: courseId },
+    data: {
+      certificateTemplateUrl: url,
+      certificateTemplateId: publicId
+    },
+    select: {
+      id: true,
+      judul: true,
+      certificateTemplateUrl: true,
+      certificateTemplateId: true
+    }
+  })
+
+  return updated
+}
+
+// ================================================
+// GET TEMPLATE CERTIFICATE COURSE
+//
+// Mengembalikan metadata template milik course.
+// Template TIDAK menyimpan data personal sehingga
+// aman dilihat oleh user terautentikasi.
+// ================================================
+const getCertificateTemplate = async (courseId, user) => {
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: {
+      id: true,
+      judul: true,
+      schoolId: true,
+      certificateTemplateUrl: true,
+      certificateTemplateId: true,
+      certificateOverlay: true
+    }
+  })
+
+  if (!course) {
+    throw createError('Course tidak ditemukan', 404)
+  }
+
+  // Authorization akses course.
+  if (user) {
+    pastikanAksesCourse(course, user)
+  }
+
+  return {
+    courseId: course.id,
+    courseName: course.judul,
+    hasTemplate: Boolean(course.certificateTemplateUrl),
+    templateUrl: course.certificateTemplateUrl,
+    templateId: course.certificateTemplateId,
+    overlay: course.certificateOverlay || null
+  }
+}
+
+// ================================================
+// GENERATE CERTIFICATE (PDF personal)
+//
+// Alur:
+// 1. Ambil certificate milik user (authorization).
+// 2. Bila certificate.fileUrl sudah ada -> tidak
+//    generate ulang (idempotent) kecuali diminta
+//    eksplisit (force = true).
+// 3. Course harus memiliki template -> jika tidak,
+//    tolak dengan error jelas (TIDAK generate).
+// 4. Render PDF: template + overlay data certificate.
+// 5. Upload hasil ke storage, simpan ke certificate.fileUrl,
+//    set status menjadi 'generated'.
+//
+// Semua data personal diambil dari certificate record
+// (recipientName, nomorSertifikat, issuedAt) — bukan
+// dari request FE.
+// ================================================
+const generateCertificate = async (
+  certificateId,
+  user,
+  { force = false } = {}
+) => {
+  const cert = await prisma.certificate.findUnique({
+    where: { id: certificateId },
+    include: {
+      course: {
+        select: {
+          id: true,
+          judul: true,
+          certificateTemplateUrl: true,
+          certificateTemplateId: true,
+          certificateOverlay: true
+        }
+      }
+    }
+  })
+
+  if (!cert) {
+    throw createError('Sertifikat tidak ditemukan', 404)
+  }
+
+  // Authorization: hanya pemilik (atau admin).
+  if (cert.userId !== user.id && user.role !== 'admin') {
+    throw createError(
+      'Kamu tidak memiliki akses ke sertifikat ini',
+      403
+    )
+  }
+
+  // Bila sudah ada file URL -> jangan generate ulang
+  // tanpa kebutuhan eksplisit.
+  if (cert.fileUrl && !force) {
+    return {
+      status: 'already_generated',
+      certificate: {
+        id: cert.id,
+        courseId: cert.courseId,
+        courseName: cert.course?.judul || null,
+        recipientName: cert.recipientName,
+        certificateNumber: cert.nomorSertifikat,
+        fileUrl: cert.fileUrl,
+        templateId: cert.templateId,
+        status: cert.status,
+        issuedAt: cert.issuedAt
+      }
+    }
+  }
+
+  // Course harus punya template.
+  const templateUrl = cert.course?.certificateTemplateUrl
+
+  if (!templateUrl) {
+    throw createError(
+      'Course belum memiliki template sertifikat',
+      400
+    )
+  }
+
+  // Ambil buffer template dari storage.
+  const templatePdfBuffer =
+    await uploadService.downloadFileBuffer(templateUrl)
+
+  // Render PDF personal.
+  const pdfBuffer = await pdfService.generateCertificatePdf({
+    templatePdfBuffer,
+    overlayConfig: cert.course?.certificateOverlay || null,
+    data: {
+      recipientName: cert.recipientName,
+      certificateNumber: cert.nomorSertifikat,
+      issuedAt: cert.issuedAt,
+      courseName: cert.course?.judul || null
+    }
+  })
+
+  // Upload hasil ke storage.
+  const fileUrl = await uploadService.uploadCertificateFile(
+    pdfBuffer,
+    cert.nomorSertifikat
+  )
+
+  // Simpan hasil ke certificate.
+  //
+  // FIX:
+  // templateId harus menyimpan ID template certificate
+  // yang digunakan oleh course, bukan courseId.
+  const updated = await prisma.certificate.update({
+    where: { id: cert.id },
+    data: {
+      fileUrl,
+      templateId: cert.course.certificateTemplateId,
+      status: 'generated'
+    },
+    include: {
+      course: { select: { id: true, judul: true } }
+    }
+  })
+
+  return {
+    status: 'generated',
+    certificate: {
+      id: updated.id,
+      courseId: updated.courseId,
+      courseName: updated.course?.judul || null,
+      recipientName: updated.recipientName,
+      certificateNumber: updated.nomorSertifikat,
+      fileUrl: updated.fileUrl,
+      templateId: updated.templateId,
+      status: updated.status,
+      issuedAt: updated.issuedAt
+    }
+  }
+}
+
+// ================================================
 // EXPORT
 // ================================================
 module.exports = {
   getMyCertificates,
   getCertificateById,
   claimCertificate,
+  uploadCertificateTemplate,
+  getCertificateTemplate,
+  generateCertificate,
   // diekspor untuk kebutuhan pengujian/logika bersama
   hitungCourseCompletion,
   generateNomorSertifikat

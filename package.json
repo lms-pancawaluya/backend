@@ -7,6 +7,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test": "node test/certificates.test.js",
+    "test:certgen": "node test/certificate-generation.test.js",
+    "test:certpdf": "node test/certificate-pdf.test.js",
     "seed": "node prisma/seed.js"
   },
   "repository": {
@@ -35,6 +37,7 @@
     "multer": "^2.4.0",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^9.0.5",
+    "pdf-lib": "^1.17.1",
     "prisma": "^5.22.0",
     "resend": "^6.19.0"
   },

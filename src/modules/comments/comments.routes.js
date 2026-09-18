@@ -5,19 +5,20 @@ const router = express.Router()
 const commentController = require('./comments.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 
-// Endpoint pencarian user untuk autocomplete @mention (ditaruh sebelum route params)
+// Endpoint pencarian user untuk autocomplete @mention (wajib ditaruh sebelum route params /:id)
 router.get('/users/search', authMiddleware, commentController.getMentionableUsers)
 
-// Semua endpoint komentar butuh login (authMiddleware)
+// Tambah komentar baru (Bisa courseId, moduleId, parentId, & mentionedUserIds)
 router.post('/', authMiddleware, commentController.createComment)
 
-// Get komentar via Query string (contoh: /comments?courseId=xxx)
+// Get komentar via Query String (contoh: /comments?courseId=xxx)
 router.get('/', authMiddleware, commentController.getComments)
 
-// Get komentar via Route params (Course atau Module)
+// Get komentar via Route Params (Course atau Module)
 router.get('/course/:courseId', authMiddleware, commentController.getComments)
 router.get('/module/:moduleId', authMiddleware, commentController.getComments)
 
+// Hapus komentar
 router.delete('/:id', authMiddleware, commentController.deleteComment)
 
 module.exports = router

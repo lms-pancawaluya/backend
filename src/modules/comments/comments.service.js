@@ -3,18 +3,32 @@
 const prisma = require('../../config/database')
 const notificationService = require('../notifications/notifications.service')
 
+// Select standar untuk info user agar struktur respons konsisten
+const userSelect = {
+  id: true,
+  nama: true,
+  fotoProfil: true,
+  role: true,
+  gelar: true
+}
+
 // 1. Tambah Komentar Baru (Bisa Root / Reply / Mention)
 const createComment = async (userId, data) => {
-  const { courseId, moduleId, komentar, parentId, mentionedUserIds } = data
+  const { courseId, moduleId, komentar, parentId, mentionedUserIds = [] } = data
 
   // Validasi: Harus ada setidaknya courseId atau moduleId
   if (!courseId && !moduleId) {
     throw new Error('Course ID atau Module ID wajib diisi')
   }
 
-  if (!komentar) {
+  if (!komentar || komentar.trim() === '') {
     throw new Error('Isi komentar wajib diisi')
   }
+
+  // Filter unique user IDs & cegah mention ke diri sendiri
+  const uniqueMentionedUserIds = Array.isArray(mentionedUserIds)
+    ? [...new Set(mentionedUserIds)].filter((id) => id !== userId)
+    : []
 
   // Cek keberadaan Context (Course / Module)
   let contextTitle = ''
@@ -45,9 +59,9 @@ const createComment = async (userId, data) => {
       courseId: targetCourseId || null,
       moduleId: moduleId || null,
       ...(parentId && { parentId }),
-      ...(Array.isArray(mentionedUserIds) && mentionedUserIds.length > 0 && {
+      ...(uniqueMentionedUserIds.length > 0 && {
         mentions: {
-          create: mentionedUserIds.map((mUserId) => ({
+          create: uniqueMentionedUserIds.map((mUserId) => ({
             userId: mUserId
           }))
         }
@@ -55,18 +69,12 @@ const createComment = async (userId, data) => {
     },
     include: {
       user: {
-        select: {
-          id: true,
-          nama: true,
-          fotoProfil: true,
-          role: true,
-          gelar: true
-        }
+        select: userSelect
       },
       mentions: {
         include: {
           user: {
-            select: { id: true, nama: true }
+            select: userSelect
           }
         }
       }
@@ -82,20 +90,16 @@ const createComment = async (userId, data) => {
       : `/modules/${moduleId}?commentId=${newComment.id}`
 
     // A. SCENARIO MENTION USER
-    if (Array.isArray(mentionedUserIds) && mentionedUserIds.length > 0) {
-      const mentionNotifications = mentionedUserIds
-        .filter((mUserId) => mUserId !== userId) // Jangan kirim notif ke diri sendiri
-        .map((mUserId) => ({
-          userId: mUserId,
-          title: 'Kamu Di-mention dalam Komentar',
-          message: `${newComment.user.nama} menyebut kamu dalam komentar di "${contextTitle}".`,
-          type: 'COMMENT_MENTION',
-          linkUrl
-        }))
+    if (uniqueMentionedUserIds.length > 0) {
+      const mentionNotifications = uniqueMentionedUserIds.map((mUserId) => ({
+        userId: mUserId,
+        title: 'Kamu Di-mention dalam Komentar',
+        message: `${newComment.user.nama} menyebut kamu dalam komentar di "${contextTitle}".`,
+        type: 'COMMENT_MENTION',
+        linkUrl
+      }))
 
-      if (mentionNotifications.length > 0) {
-        await notificationService.createManyNotifications(mentionNotifications)
-      }
+      await notificationService.createManyNotifications(mentionNotifications)
     }
 
     // B. SCENARIO REPLY COMMENT
@@ -160,36 +164,24 @@ const getCommentsByCourse = async (courseId, moduleId) => {
     where: whereCondition,
     include: {
       user: {
-        select: {
-          id: true,
-          nama: true,
-          fotoProfil: true,
-          role: true,
-          gelar: true
-        }
+        select: userSelect
       },
       mentions: {
         include: {
           user: {
-            select: { id: true, nama: true }
+            select: userSelect
           }
         }
       },
       replies: {
         include: {
           user: {
-            select: {
-              id: true,
-              nama: true,
-              fotoProfil: true,
-              role: true,
-              gelar: true
-            }
+            select: userSelect
           },
           mentions: {
             include: {
               user: {
-                select: { id: true, nama: true }
+                select: userSelect
               }
             }
           }
@@ -238,13 +230,7 @@ const searchMentionableUsers = async (query) => {
         }
       })
     },
-    select: {
-      id: true,
-      nama: true,
-      fotoProfil: true,
-      role: true,
-      gelar: true
-    },
+    select: userSelect,
     take: 10
   })
 }

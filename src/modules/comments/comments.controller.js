@@ -20,7 +20,7 @@ const createComment = async (req, res) => {
   }
 }
 
-// Mendukung pencarian komentar via Params maupun Query (`courseId` atau `moduleId`)
+// Mendukung pencarian komentar via Route Params maupun Query String (courseId / moduleId)
 const getComments = async (req, res) => {
   try {
     const courseId = req.params.courseId || req.query.courseId

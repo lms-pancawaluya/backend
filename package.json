@@ -43,7 +43,8 @@
     "resend": "^6.19.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "supabase": "^2.117.0"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

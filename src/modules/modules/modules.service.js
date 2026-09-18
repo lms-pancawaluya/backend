@@ -68,14 +68,21 @@ const getAllModules = async (query = {}, currentUser = null) => {
       _count: {
         select: {
           contents: true,
-          evaluations: true
+          preTests: true,
+          postTests: true
         }
       }
     },
     orderBy: { urutan: 'asc' }
   })
 
-  return modules
+  return modules.map((module) => ({
+    ...module,
+    _count: {
+      ...module._count,
+      evaluations: (module._count.preTests || 0) + (module._count.postTests || 0)
+    }
+  }))
 }
 
 // ================================================
@@ -113,13 +120,21 @@ const getModuleById = async (id, currentUser = null) => {
         },
         orderBy: { urutan: 'asc' }
       },
-      evaluations: {
+      preTests: {
         select: {
           id: true,
           judul: true,
-          tipe: true,
           createdAt: true
-        }
+        },
+        orderBy: { createdAt: 'asc' }
+      },
+      postTests: {
+        select: {
+          id: true,
+          judul: true,
+          createdAt: true
+        },
+        orderBy: { createdAt: 'asc' }
       }
     }
   })
@@ -135,7 +150,21 @@ const getModuleById = async (id, currentUser = null) => {
     }
   }
 
-  return module
+  const evaluations = [
+    ...module.preTests.map((preTest) => ({
+      ...preTest,
+      tipe: 'pre_test'
+    })),
+    ...module.postTests.map((postTest) => ({
+      ...postTest,
+      tipe: 'post_test'
+    }))
+  ]
+
+  return {
+    ...module,
+    evaluations
+  }
 }
 
 // ================================================

@@ -2,8 +2,8 @@
 //
 // Service domain Post-Test.
 // Business logic memakai helper bersama (src/shared/assessment.helpers.js)
-// sehingga scoring/passing score/max attempts/mustRepeat/progress IDENTIK
-// dengan implementasi existing. Compatibility layer DB: `Evaluation.tipe = "post_test"`.
+// sehingga scoring/passing score/max attempts/mustRepeat/progress tetap
+// mengikuti behavior existing.
 
 const helpers = require('../../shared/assessment.helpers')
 
@@ -16,12 +16,11 @@ const getPostTestsByModule = async (moduleId) => {
   await helpers.assertModuleExists(moduleId)
 
   const prisma = require('../../config/database')
-  return prisma.evaluation.findMany({
-    where: { moduleId, tipe: TIPE },
+  const postTests = await prisma.postTest.findMany({
+    where: { moduleId },
     select: {
       id: true,
       judul: true,
-      tipe: true,
       passingScore: true,
       maxAttempts: true,
       createdAt: true,
@@ -31,6 +30,8 @@ const getPostTestsByModule = async (moduleId) => {
     },
     orderBy: { createdAt: 'asc' }
   })
+
+  return postTests.map((postTest) => helpers.attachType(postTest, TIPE))
 }
 
 // ================================================
@@ -55,7 +56,7 @@ const deletePostTest = async (moduleId, postTestId) =>
 // QUESTION (logic existing via helper)
 // ================================================
 const createQuestion = async (postTestId, data) =>
-  helpers.createQuestion(postTestId, data)
+  helpers.createQuestion(postTestId, TIPE, data)
 
 const updateQuestion = async (questionId, data) =>
   helpers.updateQuestion(questionId, data)
@@ -67,16 +68,16 @@ const deleteQuestion = async (questionId) =>
 // SUBMIT JAWABAN (logic existing via helper)
 // ================================================
 const submitPostTest = async (postTestId, userId, data) =>
-  helpers.submitJawaban(postTestId, userId, data)
+  helpers.submitJawaban(postTestId, TIPE, userId, data)
 
 // ================================================
 // ANSWERS
 // ================================================
 const getAnswersByPostTest = async (postTestId) =>
-  helpers.getAnswersByEvaluation(postTestId)
+  helpers.getAnswersByAssessment(postTestId, TIPE)
 
 const getMyAnswers = async (postTestId, userId) =>
-  helpers.getMyAnswers(postTestId, userId)
+  helpers.getMyAnswers(postTestId, TIPE, userId)
 
 module.exports = {
   getPostTestsByModule,

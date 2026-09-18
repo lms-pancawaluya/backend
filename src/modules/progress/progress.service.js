@@ -5,37 +5,6 @@ const prisma = require('../../config/database')
 // ================================================
 // HELPER — Hitung status completion PER TAHAP
 // (Pre-Test -> Learning Material -> Post-Test)
-//
-// Contract FE:
-// - Pre-Test belum selesai -> FE mengunci Material & Post-Test.
-// - Pre-Test selesai -> Material terbuka.
-// - Material belum selesai -> FE mengunci Post-Test.
-// - Material selesai -> Post-Test terbuka.
-//
-// Definisi:
-// - preTestCompleted:
-//   module tidak punya pre-test ATAU guru sudah submit pre-test
-//   (ada user_answers pada evaluasi bertipe pre_test di module ini).
-//
-// - materialCompleted:
-//   module tidak punya learning material ATAU SELURUH material pada
-//   module sudah memenuhi aturan completion.
-//
-//   Completion per material:
-//   1. Content TANPA mini-quiz:
-//      - video       => progress >= 100 ATAU isCompleted = true
-//      - teks/pdf/link => isCompleted = true
-//
-//   2. Content DENGAN mini-quiz:
-//      - material/content harus selesai
-//      - DAN seluruh mini-quiz harus LULUS
-//
-//   Jadi mini-quiz saja TIDAK cukup untuk menyelesaikan material.
-//
-// - postTestCompleted:
-//   module tidak punya post-test ATAU skor utama guru
-//   (user_progress.skor) sudah >= passingScore.
-//
 // Catatan:
 // - Membuka halaman TIDAK dianggap selesai.
 // - Klik tombol biasa TIDAK dianggap selesai.
@@ -52,64 +21,112 @@ const hitungStageCompletion = async (userId, moduleIds) => {
   }
 
   // ================================================
-  // 1. Ambil semua evaluasi (pre-test/post-test)
+  // 1. Ambil semua assessment (pre-test/post-test)
   // ================================================
-  const evaluations = await prisma.evaluation.findMany({
-    where: {
-      moduleId: {
-        in: moduleIds
-      }
-    },
+  const [preTests, postTests] = await Promise.all([
+    prisma.preTest.findMany({
+      where: {
+        moduleId: {
+          in: moduleIds
+        }
+      },
 
-    select: {
-      id: true,
-      moduleId: true,
-      tipe: true,
-      passingScore: true,
+      select: {
+        id: true,
+        moduleId: true,
+        passingScore: true,
 
-      questions: {
-        select: {
-          id: true
+        questions: {
+          select: {
+            id: true
+          }
         }
       }
-    }
-  })
+    }),
+
+    prisma.postTest.findMany({
+      where: {
+        moduleId: {
+          in: moduleIds
+        }
+      },
+
+      select: {
+        id: true,
+        moduleId: true,
+        passingScore: true,
+
+        questions: {
+          select: {
+            id: true
+          }
+        }
+      }
+    })
+  ])
+
+  const assessments = [
+    ...preTests.map((preTest) => ({ ...preTest, tipe: 'pre_test' })),
+    ...postTests.map((postTest) => ({ ...postTest, tipe: 'post_test' }))
+  ]
 
   // ================================================
-  // 2. Ambil jawaban guru untuk evaluasi terkait
+  // 2. Ambil jawaban guru untuk assessment terkait
   // ================================================
-  const evaluationIds = evaluations.map(
-    (evaluation) => evaluation.id
+  const preTestIds = preTests.map(
+    (preTest) => preTest.id
   )
 
+  const postTestIds = postTests.map(
+    (postTest) => postTest.id
+  )
+
+  const assessmentFilters = []
+
+  if (preTestIds.length > 0) {
+    assessmentFilters.push({
+      question: {
+        preTestId: {
+          in: preTestIds
+        }
+      }
+    })
+  }
+
+  if (postTestIds.length > 0) {
+    assessmentFilters.push({
+      question: {
+        postTestId: {
+          in: postTestIds
+        }
+      }
+    })
+  }
+
   const answers =
-    evaluationIds.length > 0
+    assessmentFilters.length > 0
       ? await prisma.user_answers.findMany({
           where: {
             userId,
-
-            question: {
-              evaluationId: {
-                in: evaluationIds
-              }
-            }
+            OR: assessmentFilters
           },
 
           select: {
             question: {
               select: {
-                evaluationId: true
+                preTestId: true,
+                postTestId: true
               }
             }
           }
         })
       : []
 
-  // Set evaluationId yang sudah memiliki minimal
+  // Set assessment id yang sudah memiliki minimal
   // satu jawaban dari guru ini.
-  const evaluationDijawab = new Set(
+  const assessmentDijawab = new Set(
     answers
-      .map((answer) => answer.question?.evaluationId)
+      .map((answer) => answer.question?.preTestId || answer.question?.postTestId)
       .filter(Boolean)
   )
 
@@ -193,18 +210,18 @@ const hitungStageCompletion = async (userId, moduleIds) => {
   // 5. Bangun status setiap module
   // ================================================
   moduleIds.forEach((moduleId) => {
-    const modulEvaluations = evaluations.filter(
-      (evaluation) => evaluation.moduleId === moduleId
+    const moduleAssessments = assessments.filter(
+      (assessment) => assessment.moduleId === moduleId
     )
 
     const preTest =
-      modulEvaluations.find(
-        (evaluation) => evaluation.tipe === 'pre_test'
+      moduleAssessments.find(
+        (assessment) => assessment.tipe === 'pre_test'
       ) || null
 
     const postTest =
-      modulEvaluations.find(
-        (evaluation) => evaluation.tipe === 'post_test'
+      moduleAssessments.find(
+        (assessment) => assessment.tipe === 'post_test'
       ) || null
 
     // ================================================
@@ -215,7 +232,7 @@ const hitungStageCompletion = async (userId, moduleIds) => {
     // ================================================
     const preTestCompleted =
       !preTest ||
-      evaluationDijawab.has(preTest.id)
+      assessmentDijawab.has(preTest.id)
 
     // ================================================
     // MATERIAL
@@ -372,7 +389,8 @@ const getProgress = async (userId) => {
           _count: {
             select: {
               contents: true,
-              evaluations: true
+              preTests: true,
+              postTests: true
             }
           }
         }
@@ -413,8 +431,20 @@ const getProgress = async (userId) => {
         materialDetail: []
       }
 
+    const count = item.module?._count
+    const normalizedModule = item.module && count
+      ? {
+          ...item.module,
+          _count: {
+            ...count,
+            evaluations: (count.preTests || 0) + (count.postTests || 0)
+          }
+        }
+      : item.module
+
     return {
       ...item,
+      module: normalizedModule,
 
       preTestCompleted:
         stage.preTestCompleted,

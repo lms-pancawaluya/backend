@@ -20,12 +20,16 @@ const notificationRoute = require('./modules/notifications/notifications.route')
 const searchRouter = require('./modules/search/search.route')
 const courseRoutes = require('./modules/courses/courses.routes');
 const certificateRoute = require('./modules/certificates/certificates.route');
+const preTestsRoute = require('./modules/pre-tests/pre-tests.route')
+const postTestsRoute = require('./modules/post-tests/post-tests.route')
 
 const PORT = process.env.PORT || 3000
 
 // ===== DAFTARKAN SEMUA ROUTE =====
 app.use('/api/auth', authRoute)
 app.use('/api/users', usersRoute)
+app.use('/api/modules/:moduleId/pre-tests', preTestsRoute)
+app.use('/api/modules/:moduleId/post-tests', postTestsRoute)
 app.use('/api/modules', modulesRoute)
 app.use('/api/contents', contentsRoute)
 app.use('/api/progress', progressRoute)
@@ -39,8 +43,9 @@ app.use('/api/comments', commentRoutes)
 app.use('/api/guru', guruRoute)
 app.use('/api/notifications', notificationRoute)
 app.use('/api/search', searchRouter)
-app.use('/api/courses', courseRoutes);
-app.use('/api/certificates', certificateRoute);
+app.use('/api/courses', courseRoutes)
+app.use('/api/certificates', certificateRoute)
+
 
 
 

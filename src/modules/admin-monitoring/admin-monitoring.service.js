@@ -69,22 +69,43 @@ const getUserEvaluations = async (userId) => {
     throw new Error('User/Guru tidak ditemukan')
   }
 
-  // Ambil semua evaluasi beserta data modulnya
-  const allEvaluations = await prisma.evaluation.findMany({
-    select: {
-      id: true,
-      judul: true,
-      moduleId: true,
-      module: {
-        select: {
-          id: true,
-          judul: true,
-          urutan: true
+  // Ambil semua assessment beserta data modulnya.
+  // Nama response tetap "evaluations" untuk menjaga contract endpoint monitoring.
+  const [preTests, postTests] = await Promise.all([
+    prisma.preTest.findMany({
+      select: {
+        id: true,
+        judul: true,
+        moduleId: true,
+        module: {
+          select: {
+            id: true,
+            judul: true,
+            urutan: true
+          }
         }
       }
-    },
-    orderBy: { module: { urutan: 'asc' } }
-  })
+    }),
+    prisma.postTest.findMany({
+      select: {
+        id: true,
+        judul: true,
+        moduleId: true,
+        module: {
+          select: {
+            id: true,
+            judul: true,
+            urutan: true
+          }
+        }
+      }
+    })
+  ])
+
+  const allEvaluations = [
+    ...preTests.map((preTest) => ({ ...preTest, tipe: 'pre_test' })),
+    ...postTests.map((postTest) => ({ ...postTest, tipe: 'post_test' }))
+  ].sort((a, b) => (a.module?.urutan ?? 0) - (b.module?.urutan ?? 0))
 
   // Ambil progress modul user untuk tau skor & status lulus
   const userProgresses = await prisma.user_progress.findMany({
@@ -101,6 +122,7 @@ const getUserEvaluations = async (userId) => {
       moduleJudul: evalItem.module.judul,
       evaluationId: evalItem.id,
       evaluationJudul: evalItem.judul,
+      tipe: evalItem.tipe,
       dikerjakan,
       skor: dikerjakan ? progress.skor : null,
       status: progress ? progress.status : 'belum_mulai'

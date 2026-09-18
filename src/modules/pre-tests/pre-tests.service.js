@@ -2,8 +2,8 @@
 //
 // Service domain Pre-Test.
 // Business logic memakai helper bersama (src/shared/assessment.helpers.js)
-// sehingga scoring/passing score/max attempts/mustRepeat/progress IDENTIK
-// dengan implementasi existing. Compatibility layer DB: `Evaluation.tipe = "pre_test"`.
+// sehingga scoring/passing score/max attempts/mustRepeat/progress tetap
+// mengikuti behavior existing.
 
 const helpers = require('../../shared/assessment.helpers')
 
@@ -22,12 +22,11 @@ const getPreTestsByModule = async (moduleId) => {
 // Query terpisah agar select/orderBy tetap sama dengan existing.
 const prismaFindPreTests = async (moduleId) => {
   const prisma = require('../../config/database')
-  return prisma.evaluation.findMany({
-    where: { moduleId, tipe: TIPE },
+  const preTests = await prisma.preTest.findMany({
+    where: { moduleId },
     select: {
       id: true,
       judul: true,
-      tipe: true,
       passingScore: true,
       maxAttempts: true,
       createdAt: true,
@@ -37,6 +36,8 @@ const prismaFindPreTests = async (moduleId) => {
     },
     orderBy: { createdAt: 'asc' }
   })
+
+  return preTests.map((preTest) => helpers.attachType(preTest, TIPE))
 }
 
 // ================================================
@@ -61,7 +62,7 @@ const deletePreTest = async (moduleId, preTestId) =>
 // QUESTION (logic existing via helper)
 // ================================================
 const createQuestion = async (preTestId, data) =>
-  helpers.createQuestion(preTestId, data)
+  helpers.createQuestion(preTestId, TIPE, data)
 
 const updateQuestion = async (questionId, data) =>
   helpers.updateQuestion(questionId, data)
@@ -73,16 +74,16 @@ const deleteQuestion = async (questionId) =>
 // SUBMIT JAWABAN (logic existing via helper)
 // ================================================
 const submitPreTest = async (preTestId, userId, data) =>
-  helpers.submitJawaban(preTestId, userId, data)
+  helpers.submitJawaban(preTestId, TIPE, userId, data)
 
 // ================================================
 // ANSWERS
 // ================================================
 const getAnswersByPreTest = async (preTestId) =>
-  helpers.getAnswersByEvaluation(preTestId)
+  helpers.getAnswersByAssessment(preTestId, TIPE)
 
 const getMyAnswers = async (preTestId, userId) =>
-  helpers.getMyAnswers(preTestId, userId)
+  helpers.getMyAnswers(preTestId, TIPE, userId)
 
 module.exports = {
   getPreTestsByModule,

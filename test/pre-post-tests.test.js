@@ -14,7 +14,8 @@ const Module = require('module')
 // ================================================
 let db = {
   modules: [],
-  evaluations: [],
+  preTests: [],
+  postTests: [],
   questions: [],
   options: [],
   user_progress: [],
@@ -27,89 +28,94 @@ const nextId = (prefix) => `${prefix}-${++idCounter}`
 // ================================================
 // Mock Prisma
 // ================================================
-const mockPrisma = {
-  module: {
-    findUnique: async ({ where }) =>
-      db.modules.find((m) => m.id === where.id) || null
-  },
-  evaluation: {
+function createAssessmentDelegate(storeName, assessmentField, idPrefix) {
+  return {
     findUnique: async (args) => {
       const { where } = args
-      const e = db.evaluations.find((x) => x.id === where.id)
-      if (!e) return null
-      const out = { ...e }
+      const assessment = db[storeName].find((x) => x.id === where.id)
+      if (!assessment) return null
+
+      const out = { ...assessment }
       const wantsQuestions =
         args.include?.questions || args.select?.questions
+
       if (wantsQuestions) {
         out.questions = db.questions
-          .filter((q) => q.evaluationId === e.id)
+          .filter((q) => q[assessmentField] === assessment.id)
           .map((q) => ({
             ...q,
             options: db.options.filter((o) => o.questionId === q.id)
           }))
       } else if (args.select) {
-        // select tanpa questions: kembalikan hanya field yang diminta
         const picked = {}
         for (const k of Object.keys(args.select)) {
-          if (args.select[k] && k !== 'questions') picked[k] = e[k]
+          if (args.select[k] && k !== 'questions') picked[k] = assessment[k]
         }
         return picked
       }
+
       return out
     },
     findMany: async ({ where }) =>
-      db.evaluations
-        .filter(
-          (e) =>
-            e.moduleId === where.moduleId &&
-            (where.tipe === undefined || e.tipe === where.tipe)
-        )
-        .map((e) => ({
-          ...e,
+      db[storeName]
+        .filter((assessment) => assessment.moduleId === where.moduleId)
+        .map((assessment) => ({
+          ...assessment,
           _count: {
-            questions: db.questions.filter((q) => q.evaluationId === e.id).length
+            questions: db.questions.filter((q) => q[assessmentField] === assessment.id).length
           }
         })),
     create: async ({ data }) => {
-      const e = {
-        id: nextId('eval'),
+      const assessment = {
+        id: nextId(idPrefix),
         createdAt: new Date('2026-01-01T00:00:00Z'),
         ...data
       }
-      db.evaluations.push(e)
-      return e
+      db[storeName].push(assessment)
+      return assessment
     },
     delete: async ({ where }) => {
-      const idx = db.evaluations.findIndex((x) => x.id === where.id)
+      const idx = db[storeName].findIndex((x) => x.id === where.id)
       if (idx === -1) {
         const err = new Error('Record to delete does not exist.')
         err.code = 'P2025'
         throw err
       }
-      const [removed] = db.evaluations.splice(idx, 1)
-      // cascade
+      const [removed] = db[storeName].splice(idx, 1)
       const qIds = db.questions
-        .filter((q) => q.evaluationId === where.id)
+        .filter((q) => q[assessmentField] === where.id)
         .map((q) => q.id)
-      db.questions = db.questions.filter((q) => q.evaluationId !== where.id)
+      db.questions = db.questions.filter((q) => q[assessmentField] !== where.id)
       db.options = db.options.filter((o) => !qIds.includes(o.questionId))
       db.user_answers = db.user_answers.filter(
         (a) => !qIds.includes(a.questionId)
       )
       return removed
     }
+  }
+}
+
+const mockPrisma = {
+  module: {
+    findUnique: async ({ where }) =>
+      db.modules.find((m) => m.id === where.id) || null
   },
+  preTest: createAssessmentDelegate('preTests', 'preTestId', 'pre'),
+  postTest: createAssessmentDelegate('postTests', 'postTestId', 'post'),
   question: {
     findUnique: async ({ where }) =>
       db.questions.find((q) => q.id === where.id) || null,
     create: async ({ data }) => {
+      const assessmentField = data.preTestId ? 'preTestId' : 'postTestId'
       const q = {
         id: nextId('q'),
-        evaluationId: data.evaluationId,
+        preTestId: data.preTestId || null,
+        postTestId: data.postTestId || null,
         pertanyaan: data.pertanyaan,
         tipe: data.tipe,
         createdAt: new Date('2026-01-01T00:00:00Z')
       }
+      if (!q[assessmentField]) throw new Error('Assessment id wajib diisi')
       db.questions.push(q)
       const opts = (data.options?.create || []).map((o) => {
         const opt = { id: nextId('opt'), questionId: q.id, ...o }
@@ -187,7 +193,9 @@ const mockPrisma = {
     findMany: async ({ where }) => {
       return db.user_answers.filter((a) => {
         const q = db.questions.find((x) => x.id === a.questionId)
-        if (!q || q.evaluationId !== where.question.evaluationId) return false
+        if (!q) return false
+        if (where.question.preTestId && q.preTestId !== where.question.preTestId) return false
+        if (where.question.postTestId && q.postTestId !== where.question.postTestId) return false
         if (where.userId && a.userId !== where.userId) return false
         return true
       })
@@ -232,7 +240,8 @@ async function test(name, fn) {
 function reset() {
   db = {
     modules: [],
-    evaluations: [],
+    preTests: [],
+    postTests: [],
     questions: [],
     options: [],
     user_progress: [],
@@ -265,24 +274,31 @@ function seedModule(id) {
   db.modules.push({ id, judul: `Modul ${id}` })
 }
 
-function seedEval({ moduleId, tipe, passingScore, maxAttempts }) {
-  const e = {
-    id: nextId('eval'),
+function seedAssessment({ moduleId, tipe, passingScore, maxAttempts }) {
+  const isPreTest = tipe === 'pre_test'
+  const assessment = {
+    id: nextId(isPreTest ? 'pre' : 'post'),
     moduleId,
-    judul: `Eval ${tipe}`,
-    tipe,
-    passingScore: passingScore ?? (tipe === 'pre_test' ? 0 : 80),
-    maxAttempts: maxAttempts ?? (tipe === 'pre_test' ? 1 : 3),
+    judul: `Assessment ${tipe}`,
+    passingScore: passingScore ?? (isPreTest ? 0 : 80),
+    maxAttempts: maxAttempts ?? (isPreTest ? 1 : 3),
     createdAt: new Date('2026-01-01T00:00:00Z')
   }
-  db.evaluations.push(e)
-  return e
+
+  if (isPreTest) {
+    db.preTests.push(assessment)
+  } else {
+    db.postTests.push(assessment)
+  }
+
+  return assessment
 }
 
-function seedQuestion(evalId, correct = true) {
+function seedQuestion(assessmentId, tipe = 'pre_test') {
   const q = {
     id: nextId('q'),
-    evaluationId: evalId,
+    preTestId: tipe === 'pre_test' ? assessmentId : null,
+    postTestId: tipe === 'post_test' ? assessmentId : null,
     pertanyaan: 'Pertanyaan?',
     tipe: 'pilihan_ganda',
     createdAt: new Date('2026-01-01T00:00:00Z')
@@ -303,8 +319,8 @@ async function main() {
   await test('PRE GET: list pre-test by module', async () => {
     reset()
     seedModule(MOD_A)
-    seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
-    seedEval({ moduleId: MOD_A, tipe: 'post_test' })
+    seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
+    seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
 
     const list = await preService.getPreTestsByModule(MOD_A)
     assert.strictEqual(list.length, 1)
@@ -314,8 +330,8 @@ async function main() {
   await test('PRE GET by ID: ambil detail + soal', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
-    seedQuestion(e.id)
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
+    seedQuestion(e.id, 'pre_test')
 
     const detail = await preService.getPreTestById(e.id)
     assert.strictEqual(detail.id, e.id)
@@ -325,7 +341,7 @@ async function main() {
   await test('PRE GET by ID: post_test -> ditolak (tipe mismatch)', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'post_test' })
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
     await assert.rejects(() => preService.getPreTestById(e.id))
   })
 
@@ -346,7 +362,7 @@ async function main() {
   await test('PRE QUESTION CRUD: create, update, delete', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
 
     const created = await preService.createQuestion(e.id, {
       pertanyaan: 'Q1',
@@ -374,8 +390,8 @@ async function main() {
   await test('PRE SUBMIT: pre_test -> sedang_belajar, skor utama tidak ditimpa', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
-    const { question, correctId } = seedQuestion(e.id)
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
+    const { question, correctId } = seedQuestion(e.id, 'pre_test')
 
     const hasil = await preService.submitPreTest(e.id, USER, {
       jawaban: [{ questionId: question.id, jawaban: correctId }]
@@ -392,8 +408,8 @@ async function main() {
   await test('PRE ANSWERS: get answers by pre-test', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
-    const { question, correctId } = seedQuestion(e.id)
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
+    const { question, correctId } = seedQuestion(e.id, 'pre_test')
     await preService.submitPreTest(e.id, USER, {
       jawaban: [{ questionId: question.id, jawaban: correctId }]
     })
@@ -409,26 +425,18 @@ async function main() {
   await test('PRE DELETE: hapus pre-test berhasil', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
     const r = await preService.deletePreTest(MOD_A, e.id)
     assert.strictEqual(r.pesan, 'Pre-Test berhasil dihapus')
-    assert.strictEqual(db.evaluations.length, 0)
+    assert.strictEqual(db.preTests.length, 0)
   })
 
   await test('PRE DELETE: post_test via pre-tests -> ditolak', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'post_test' })
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
     await assert.rejects(() => preService.deletePreTest(MOD_A, e.id))
-    assert.strictEqual(db.evaluations.length, 1)
-  })
-
-  await test('PRE DELETE: tipe legacy module_eval -> ditolak & tidak dihapus', async () => {
-    reset()
-    seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'module_eval' })
-    await assert.rejects(() => preService.deletePreTest(MOD_A, e.id))
-    assert.strictEqual(db.evaluations.length, 1)
+    assert.strictEqual(db.postTests.length, 1)
   })
 
   // ============ POST-TEST ============
@@ -437,9 +445,9 @@ async function main() {
   await test('POST GET: list post-test by module', async () => {
     reset()
     seedModule(MOD_A)
-    seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
-    seedEval({ moduleId: MOD_A, tipe: 'post_test' })
-    seedEval({ moduleId: MOD_A, tipe: 'post_test' })
+    seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
+    seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
+    seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
 
     const list = await postService.getPostTestsByModule(MOD_A)
     assert.strictEqual(list.length, 2)
@@ -449,7 +457,7 @@ async function main() {
   await test('POST GET by ID: pre_test -> ditolak (tipe mismatch)', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
     await assert.rejects(() => postService.getPostTestById(e.id))
   })
 
@@ -477,7 +485,7 @@ async function main() {
   await test('POST QUESTION CRUD: create, update, delete', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'post_test' })
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
     const created = await postService.createQuestion(e.id, {
       pertanyaan: 'Q1',
       options: [
@@ -495,8 +503,8 @@ async function main() {
   await test('POST SUBMIT lulus -> module selesai, skor ditimpa', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'post_test' })
-    const { question, correctId } = seedQuestion(e.id)
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
+    const { question, correctId } = seedQuestion(e.id, 'post_test')
 
     const hasil = await postService.submitPostTest(e.id, USER, {
       jawaban: [{ questionId: question.id, jawaban: correctId }]
@@ -510,8 +518,8 @@ async function main() {
   await test('POST SUBMIT gagal (belum max attempts) -> sedang_belajar', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'post_test' })
-    const { question, wrongId } = seedQuestion(e.id)
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
+    const { question, wrongId } = seedQuestion(e.id, 'post_test')
 
     const hasil = await postService.submitPostTest(e.id, USER, {
       jawaban: [{ questionId: question.id, jawaban: wrongId }]
@@ -525,8 +533,8 @@ async function main() {
   await test('POST SUBMIT capai max attempts -> mustRepeat & reset', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'post_test', maxAttempts: 1 })
-    const { question, wrongId } = seedQuestion(e.id)
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'post_test', maxAttempts: 1 })
+    const { question, wrongId } = seedQuestion(e.id, 'post_test')
 
     const hasil = await postService.submitPostTest(e.id, USER, {
       jawaban: [{ questionId: question.id, jawaban: wrongId }]
@@ -539,8 +547,8 @@ async function main() {
   await test('POST ANSWERS: get & my answers', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'post_test' })
-    const { question, correctId } = seedQuestion(e.id)
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
+    const { question, correctId } = seedQuestion(e.id, 'post_test')
     await postService.submitPostTest(e.id, USER, {
       jawaban: [{ questionId: question.id, jawaban: correctId }]
     })
@@ -553,18 +561,18 @@ async function main() {
   await test('POST DELETE: hapus post-test berhasil', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'post_test' })
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'post_test' })
     const r = await postService.deletePostTest(MOD_A, e.id)
     assert.strictEqual(r.pesan, 'Post-Test berhasil dihapus')
-    assert.strictEqual(db.evaluations.length, 0)
+    assert.strictEqual(db.postTests.length, 0)
   })
 
   await test('POST DELETE: pre_test via post-tests -> ditolak', async () => {
     reset()
     seedModule(MOD_A)
-    const e = seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
+    const e = seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
     await assert.rejects(() => postService.deletePostTest(MOD_A, e.id))
-    assert.strictEqual(db.evaluations.length, 1)
+    assert.strictEqual(db.preTests.length, 1)
   })
 
   // ============ CONTROLLER / AUTHZ ============
@@ -573,7 +581,7 @@ async function main() {
   await test('CTRL: GET pre-tests list (200)', async () => {
     reset()
     seedModule(MOD_A)
-    seedEval({ moduleId: MOD_A, tipe: 'pre_test' })
+    seedAssessment({ moduleId: MOD_A, tipe: 'pre_test' })
     const res = fakeRes()
     await preController.getPreTestsByModule({ params: { moduleId: MOD_A } }, res)
     assert.strictEqual(res.statusCode, 200)
@@ -594,14 +602,14 @@ async function main() {
     reset()
     seedModule(MOD_A)
     seedModule(MOD_B)
-    const e = seedEval({ moduleId: MOD_B, tipe: 'post_test' })
+    const e = seedAssessment({ moduleId: MOD_B, tipe: 'post_test' })
     const res = fakeRes()
     await postController.deletePostTest(
       { params: { moduleId: MOD_A, postTestId: e.id } },
       res
     )
     assert.strictEqual(res.statusCode, 400)
-    assert.strictEqual(db.evaluations.length, 1)
+    assert.strictEqual(db.postTests.length, 1)
   })
 
   await test('AUTHZ: unauthenticated -> 401', async () => {

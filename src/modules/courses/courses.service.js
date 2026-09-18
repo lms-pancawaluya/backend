@@ -107,7 +107,23 @@ class CoursesService {
           orderBy: { urutan: 'asc' },
           include: {
             contents: { orderBy: { urutan: 'asc' } },
-            evaluations: true,
+            preTests: {
+              orderBy: { createdAt: 'asc' },
+              include: {
+                questions: {
+                  select: {
+                    id: true,
+                    answers: {
+                      where: { userId: user?.id || 'NO_USER_MATCH' },
+                      select: { id: true },
+                    },
+                  },
+                },
+              },
+            },
+            postTests: {
+              orderBy: { createdAt: 'asc' },
+            },
           },
         },
       },
@@ -148,10 +164,12 @@ class CoursesService {
       const isCompleted = userProg?.status === 'selesai';
       const isLocked = !isPreviousModuleCompleted;
 
-      const preTest = module.evaluations.find((e) => e.tipe === 'pre_test');
-      const postTest = module.evaluations.find((e) => e.tipe === 'post_test');
+      const preTest = module.preTests[0] || null;
+      const postTest = module.postTests[0] || null;
 
-      const preTestCompleted = !preTest || (userProg?.preTestSkor ?? 0) > 0;
+      const preTestCompleted =
+        !preTest ||
+        preTest.questions.some((question) => question.answers.length > 0);
       const postTestCompleted =
         !postTest || (userProg?.skor ?? 0) >= (postTest?.passingScore || 80);
 

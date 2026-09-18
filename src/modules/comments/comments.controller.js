@@ -1,3 +1,5 @@
+// src/modules/comments/comments.controller.js
+
 const commentService = require('./comments.service')
 
 const createComment = async (req, res) => {
@@ -18,10 +20,13 @@ const createComment = async (req, res) => {
   }
 }
 
-const getCommentsByModule = async (req, res) => {
+// Mendukung pencarian komentar via Params maupun Query (`courseId` atau `moduleId`)
+const getComments = async (req, res) => {
   try {
-    const { moduleId } = req.params
-    const result = await commentService.getCommentsByModule(moduleId)
+    const courseId = req.params.courseId || req.query.courseId
+    const moduleId = req.params.moduleId || req.query.moduleId
+
+    const result = await commentService.getCommentsByCourse(courseId, moduleId)
 
     return res.status(200).json({
       sukses: true,
@@ -29,7 +34,7 @@ const getCommentsByModule = async (req, res) => {
       data: result
     })
   } catch (error) {
-    return res.status(500).json({
+    return res.status(400).json({
       sukses: false,
       pesan: error.message
     })
@@ -56,8 +61,27 @@ const deleteComment = async (req, res) => {
   }
 }
 
+// Controller untuk pencarian user (autocomplete `@mention`)
+const getMentionableUsers = async (req, res) => {
+  try {
+    const { q } = req.query
+    const result = await commentService.searchMentionableUsers(q)
+
+    return res.status(200).json({
+      sukses: true,
+      data: result
+    })
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   createComment,
-  getCommentsByModule,
-  deleteComment
+  getComments,
+  deleteComment,
+  getMentionableUsers
 }

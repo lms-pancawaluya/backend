@@ -74,18 +74,18 @@ enum CourseMode {
 // ==========================================
 
 model User {
-  id       String     @id @default(uuid())
-  nama     String
-  email    String     @unique
-  password String
-  role     Role       @default(guru)
-  status   UserStatus @default(aktif) @map("status")
-  nip      String?    @unique @map("nip")
-  sekolah  String?    @map("sekolah")
+  id           String     @id @default(uuid())
+  nama         String
+  email        String     @unique
+  password     String
+  role         Role       @default(guru)
+  status       UserStatus @default(aktif) @map("status")
+  nip          String?    @unique @map("nip")
+  sekolah      String?    @map("sekolah")
 
   // Relasi ke MasterSekolah
-  schoolId String?        @map("school_id")
-  school   MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  schoolId     String?        @map("school_id")
+  school       MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
 
   kotaKab      String?   @map("kota/kab")
   kecamatan    String?   @map("kecamatan")
@@ -105,12 +105,15 @@ model User {
   feedbacks        Feedback[]
   comments         Comment[]
   rtlSubmissions   RtlSubmission[]
-  reviewedRtls     RtlSubmission[] @relation("TrainerRtlReviewer")
-  tickets          Ticket[]        @relation("UserTickets")
-  ticketReplies    TicketReply[]   @relation("UserTicketReplies")
+  reviewedRtls     RtlSubmission[]        @relation("TrainerRtlReviewer")
+  tickets          Ticket[]               @relation("UserTickets")
+  ticketReplies    TicketReply[]          @relation("UserTicketReplies")
   notifications    Notification[]
   certificates     Certificate[]
-  createdCourses   Course[]        @relation("UserCreatedCourses")
+  createdCourses   Course[]               @relation("UserCreatedCourses")
+  
+  // Relasi Baru: Mention pada komentar
+  commentMentions  CommentMention[]
 
   // Progress per material
   contentProgress UserContentProgress[]
@@ -137,8 +140,6 @@ model Course {
   certificateOverlay     Json?   @map("certificate_overlay")
 
   // Scope & Ownership
-  // null  -> GLOBAL
-  // value -> SCOPE SEKOLAH
   schoolId String?        @map("school_id")
   school   MasterSekolah? @relation(fields: [schoolId], references: [id], onDelete: SetNull)
 
@@ -157,6 +158,9 @@ model Course {
   modules        Module[]
   courseProgress user_course_progress[]
   certificates   Certificate[]
+  
+  // Relasi Baru: Discussion/Comment scope Course
+  comments       Comment[]
 
   @@index([schoolId])
   @@index([createdBy])
@@ -187,6 +191,8 @@ model Module {
   progress       user_progress[]
   feedbacks      Feedback[]
   rtlSubmissions RtlSubmission[]
+  
+  // Dipertahankan agar data komentar lama tidak orphan/terhapus
   comments       Comment[]
 
   @@index([courseId])
@@ -218,13 +224,6 @@ model Content {
 // ==========================================
 // PRE-TEST
 // ==========================================
-//
-// Menggantikan:
-// Evaluation(tipe = pre_test)
-//
-// Struktur:
-// Module -> PreTest -> Question -> Option
-//
 
 model PreTest {
   id           String   @id @default(uuid())
@@ -245,13 +244,6 @@ model PreTest {
 // ==========================================
 // POST-TEST
 // ==========================================
-//
-// Menggantikan:
-// Evaluation(tipe = post_test)
-//
-// Struktur:
-// Module -> PostTest -> Question -> Option
-//
 
 model PostTest {
   id           String   @id @default(uuid())
@@ -272,16 +264,6 @@ model PostTest {
 // ==========================================
 // QUESTION
 // ==========================================
-//
-// Sebelumnya:
-// Question -> Evaluation
-//
-// Sekarang:
-// Question -> PreTest ATAU PostTest
-//
-// Satu question hanya boleh menjadi milik
-// salah satu assessment.
-//
 
 model Question {
   id          String       @id @default(uuid())
@@ -377,11 +359,7 @@ model user_progress {
   moduleId    String         @map("module_id")
   status      ProgressStatus @default(belum_mulai)
 
-  // Dipertahankan untuk kompatibilitas data existing.
-  // Logic Pre-Test saat ini menggunakan user_answers.
   preTestSkor Int?           @default(0) @map("pre_test_skor")
-
-  // Skor Post-Test / evaluasi utama
   skor        Int?           @default(0)
 
   attempts    Int            @default(0)
@@ -400,11 +378,6 @@ model user_progress {
 // ==========================================
 // USER ANSWERS
 // ==========================================
-//
-// Jawaban tetap terhubung ke Question.
-// Karena Question sudah mengetahui apakah dia
-// milik PreTest atau PostTest.
-//
 
 model user_answers {
   id         String   @id @default(uuid())
@@ -446,27 +419,53 @@ model Feedback {
 }
 
 // ==========================================
-// COMMENT
+// COMMENT (REVISED FOR COURSE-LEVEL)
 // ==========================================
 
 model Comment {
   id        String   @id @default(uuid())
-  moduleId  String   @map("module_id")
+  
+  // Field dibuat nullable (?) agar data komentar lama berbasis moduleId tidak hilang
+  courseId  String?  @map("course_id") 
+  moduleId  String?  @map("module_id") 
+  
   userId    String   @map("user_id")
   parentId  String?  @map("parent_id")
   komentar  String   @db.Text
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relasi
-  module  Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies Comment[] @relation("CommentReplies")
+  course   Course?          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module   Module?          @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Comment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[]        @relation("CommentReplies")
+  mentions CommentMention[]
 
+  @@index([courseId])
   @@index([moduleId])
   @@index([userId])
   @@index([parentId])
   @@map("comments")
+}
+
+// ==========================================
+// COMMENT MENTION (NEW MODEL)
+// ==========================================
+
+model CommentMention {
+  id        String   @id @default(uuid())
+  commentId String   @map("comment_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([commentId])
+  @@index([userId])
+  @@map("comment_mentions")
 }
 
 // ==========================================
@@ -506,13 +505,9 @@ model Certificate {
   courseId        String @map("course_id")
   nomorSertifikat String @unique @map("nomor_sertifikat")
 
-  // Nullable karena certificate dapat di-claim
-  // sebelum file PDF berhasil di-generate.
-  fileUrl String? @map("file_url") @db.Text
-
+  fileUrl  String?  @map("file_url") @db.Text
   issuedAt DateTime @default(now()) @map("issued_at")
 
-  // Metadata certificate
   recipientName String   @map("recipient_name")
   templateId    String?  @map("template_id")
   status        String   @default("issued") @map("status")

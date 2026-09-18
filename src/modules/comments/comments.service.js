@@ -1,31 +1,57 @@
 // src/modules/comments/comments.service.js
 
 const prisma = require('../../config/database')
-const notificationService = require('../notifications/notifications.service') // Import notificationService
+const notificationService = require('../notifications/notifications.service')
 
-// 1. Tambah Komentar Baru (Bisa Root Comment / Reply Comment)
+// 1. Tambah Komentar Baru (Bisa Root / Reply / Mention)
 const createComment = async (userId, data) => {
-  const { moduleId, komentar, parentId } = data // Tangkap parentId jika ada balasan
+  const { courseId, moduleId, komentar, parentId, mentionedUserIds } = data
 
-  if (!moduleId || !komentar) {
-    throw new Error('Module ID dan isi komentar wajib diisi')
+  // Validasi: Harus ada setidaknya courseId atau moduleId
+  if (!courseId && !moduleId) {
+    throw new Error('Course ID atau Module ID wajib diisi')
   }
 
-  // Cek apakah modul ada
-  const moduleExist = await prisma.module.findUnique({
-    where: { id: moduleId }
-  })
-
-  if (!moduleExist) {
-    throw new Error('Modul tidak ditemukan')
+  if (!komentar) {
+    throw new Error('Isi komentar wajib diisi')
   }
 
+  // Cek keberadaan Context (Course / Module)
+  let contextTitle = ''
+  let targetCourseId = courseId
+
+  if (courseId) {
+    const courseExist = await prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, judul: true }
+    })
+    if (!courseExist) throw new Error('Course tidak ditemukan')
+    contextTitle = courseExist.judul
+  } else if (moduleId) {
+    const moduleExist = await prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { id: true, judul: true, courseId: true }
+    })
+    if (!moduleExist) throw new Error('Modul tidak ditemukan')
+    contextTitle = moduleExist.judul
+    targetCourseId = moduleExist.courseId
+  }
+
+  // Buat Komentar beserta Mentions (jika ada) dalam satu transaksi Prisma
   const newComment = await prisma.comment.create({
     data: {
       userId,
-      moduleId,
       komentar,
-      ...(parentId && { parentId }) // Simpan parentId jika membalas komentar
+      courseId: targetCourseId || null,
+      moduleId: moduleId || null,
+      ...(parentId && { parentId }),
+      ...(Array.isArray(mentionedUserIds) && mentionedUserIds.length > 0 && {
+        mentions: {
+          create: mentionedUserIds.map((mUserId) => ({
+            userId: mUserId
+          }))
+        }
+      })
     },
     include: {
       user: {
@@ -36,6 +62,13 @@ const createComment = async (userId, data) => {
           role: true,
           gelar: true
         }
+      },
+      mentions: {
+        include: {
+          user: {
+            select: { id: true, nama: true }
+          }
+        }
       }
     }
   })
@@ -44,30 +77,50 @@ const createComment = async (userId, data) => {
   // AUTO NOTIFIKASI
   // ================================================
   try {
-    // SCENARIO 1: MEMBALAS KOMENTAR (Reply Comment)
+    const linkUrl = targetCourseId 
+      ? `/courses/${targetCourseId}?commentId=${newComment.id}`
+      : `/modules/${moduleId}?commentId=${newComment.id}`
+
+    // A. SCENARIO MENTION USER
+    if (Array.isArray(mentionedUserIds) && mentionedUserIds.length > 0) {
+      const mentionNotifications = mentionedUserIds
+        .filter((mUserId) => mUserId !== userId) // Jangan kirim notif ke diri sendiri
+        .map((mUserId) => ({
+          userId: mUserId,
+          title: 'Kamu Di-mention dalam Komentar',
+          message: `${newComment.user.nama} menyebut kamu dalam komentar di "${contextTitle}".`,
+          type: 'COMMENT_MENTION',
+          linkUrl
+        }))
+
+      if (mentionNotifications.length > 0) {
+        await notificationService.createManyNotifications(mentionNotifications)
+      }
+    }
+
+    // B. SCENARIO REPLY COMMENT
     if (parentId) {
       const parentComment = await prisma.comment.findUnique({
         where: { id: parentId },
         select: { userId: true }
       })
 
-      // Kirim notifikasi HANYA jika yang membalas BUKAN pembuat komentar itu sendiri
       if (parentComment && parentComment.userId !== userId) {
         await notificationService.createNotification({
-          userId: parentComment.userId, // Pemilik komentar utama (Guru/Pengajar/Admin)
+          userId: parentComment.userId,
           title: 'Balasan Komentar',
-          message: `${newComment.user.nama} membalas komentar kamu di Modul "${moduleExist.judul}".`,
+          message: `${newComment.user.nama} membalas komentar kamu di "${contextTitle}".`,
           type: 'COMMENT_REPLY',
-          linkUrl: `/modules/${moduleId}?commentId=${newComment.id}`
+          linkUrl
         })
       }
     } 
-    // SCENARIO 2: KOMENTAR UTAMA BARU (Root Comment)
+    // C. SCENARIO ROOT COMMENT (Notifikasi ke Pengajar)
     else {
       const pengajarList = await prisma.user.findMany({
         where: {
           role: 'pengajar',
-          NOT: { id: userId } // Jangan kirim ke diri sendiri jika pengajar yang menulis komentar
+          NOT: { id: userId }
         },
         select: { id: true }
       })
@@ -75,10 +128,10 @@ const createComment = async (userId, data) => {
       if (pengajarList.length > 0) {
         const notificationsData = pengajarList.map((pengajar) => ({
           userId: pengajar.id,
-          title: 'Komentar Baru di Modul',
-          message: `${newComment.user.nama} menambahkan komentar baru di Modul ${moduleExist.judul}.`,
+          title: 'Komentar Baru',
+          message: `${newComment.user.nama} menambahkan komentar baru di "${contextTitle}".`,
           type: 'NEW_COMMENT',
-          linkUrl: `/modules/${moduleId}?commentId=${newComment.id}`
+          linkUrl
         }))
 
         await notificationService.createManyNotifications(notificationsData)
@@ -91,14 +144,20 @@ const createComment = async (userId, data) => {
   return newComment
 }
 
-// 2. Get Semua Komentar Berdasarkan Module ID
-const getCommentsByModule = async (moduleId) => {
-  if (!moduleId) {
-    throw new Error('Module ID wajib disertakan')
+// 2. Get Komentar Berdasarkan Course ID / Module ID (Termasuk Reply & Mentions)
+const getCommentsByCourse = async (courseId, moduleId) => {
+  if (!courseId && !moduleId) {
+    throw new Error('Course ID atau Module ID wajib disertakan')
+  }
+
+  // Filter HANYA komentar utama (parentId: null) agar reply tidak terduplikasi di root
+  const whereCondition = {
+    parentId: null,
+    ...(courseId ? { courseId } : { moduleId })
   }
 
   const comments = await prisma.comment.findMany({
-    where: { moduleId },
+    where: whereCondition,
     include: {
       user: {
         select: {
@@ -108,17 +167,45 @@ const getCommentsByModule = async (moduleId) => {
           role: true,
           gelar: true
         }
+      },
+      mentions: {
+        include: {
+          user: {
+            select: { id: true, nama: true }
+          }
+        }
+      },
+      replies: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              nama: true,
+              fotoProfil: true,
+              role: true,
+              gelar: true
+            }
+          },
+          mentions: {
+            include: {
+              user: {
+                select: { id: true, nama: true }
+              }
+            }
+          }
+        },
+        orderBy: { createdAt: 'asc' }
       }
     },
     orderBy: {
-      createdAt: 'desc' // Komentar terbaru di paling atas
+      createdAt: 'desc'
     }
   })
 
   return comments
 }
 
-// 3. Hapus Komentar (Oleh Pemilik Komentar atau Admin)
+// 3. Hapus Komentar
 const deleteComment = async (commentId, userId, userRole) => {
   const comment = await prisma.comment.findUnique({
     where: { id: commentId }
@@ -128,7 +215,6 @@ const deleteComment = async (commentId, userId, userRole) => {
     throw new Error('Komentar tidak ditemukan')
   }
 
-  // Hanya pemilik komentar ATAU Admin yang boleh menghapus
   if (comment.userId !== userId && userRole !== 'admin') {
     throw new Error('Kamu tidak memiliki akses untuk menghapus komentar ini')
   }
@@ -140,8 +226,32 @@ const deleteComment = async (commentId, userId, userRole) => {
   return { pesan: 'Komentar berhasil dihapus' }
 }
 
+// 4. Cari User untuk Autocomplete Mention (@)
+const searchMentionableUsers = async (query) => {
+  return await prisma.user.findMany({
+    where: {
+      status: 'aktif',
+      ...(query && {
+        nama: {
+          contains: query,
+          mode: 'insensitive'
+        }
+      })
+    },
+    select: {
+      id: true,
+      nama: true,
+      fotoProfil: true,
+      role: true,
+      gelar: true
+    },
+    take: 10
+  })
+}
+
 module.exports = {
   createComment,
-  getCommentsByModule,
-  deleteComment
+  getCommentsByCourse,
+  deleteComment,
+  searchMentionableUsers
 }

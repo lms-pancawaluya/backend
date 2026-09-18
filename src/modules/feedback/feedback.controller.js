@@ -3,14 +3,18 @@ const feedbackService = require('./feedback.service')
 const createFeedback = async (req, res) => {
   try {
     const userId = req.user.id
-    const { moduleId } = req.params
-    const { saran, kritik } = req.body
+    const { courseId } = req.params
+    const { saran, masukan, moduleId } = req.body
 
-    const result = await feedbackService.createFeedback(userId, moduleId, { saran, kritik })
+    const result = await feedbackService.createFeedback(userId, courseId, { 
+      saran, 
+      masukan, 
+      moduleId 
+    })
 
     return res.status(201).json({
       sukses: true,
-      pesan: 'Saran dan kritik berhasil dikirim',
+      pesan: 'Saran dan masukan berhasil dikirim',
       data: result
     })
   } catch (error) {

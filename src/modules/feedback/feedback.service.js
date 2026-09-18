@@ -1,38 +1,40 @@
 const prisma = require('../../config/database')
 
-// Guru kirim saran & kritik untuk modul tertentu
-const createFeedback = async (userId, moduleId, data) => {
-  const { saran, kritik } = data
+// Guru kirim saran & masukan pikeun course tangtu
+const createFeedback = async (userId, courseId, data) => {
+  const { saran, masukan, moduleId } = data
 
   if (!saran) {
     throw new Error('Saran wajib diisi')
   }
 
-  const moduleAda = await prisma.module.findUnique({
-    where: { id: moduleId }
+  const courseAda = await prisma.course.findUnique({
+    where: { id: courseId }
   })
 
-  if (!moduleAda) {
-    throw new Error('Modul tidak ditemukan')
+  if (!courseAda) {
+    throw new Error('Course tidak ditemukan')
   }
 
   const feedback = await prisma.feedback.create({
     data: {
       userId,
-      moduleId,
+      courseId,
+      moduleId: moduleId || null, // Opsional pikeun legacy data
       saran,
-      kritik
+      masukan: masukan || null
     }
   })
 
   return feedback
 }
 
-// Admin melihat seluruh daftar masukan
+// Admin ningali sadaya daptar masukan/feedback
 const getAllFeedbacks = async () => {
   return prisma.feedback.findMany({
     include: {
       user: { select: { id: true, nama: true, email: true, sekolah: true } },
+      course: { select: { id: true, judul: true } },
       module: { select: { id: true, judul: true } }
     },
     orderBy: { createdAt: 'desc' }

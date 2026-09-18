@@ -162,6 +162,9 @@ model Course {
   // Relasi Baru: Discussion/Comment scope Course
   comments       Comment[]
 
+  // TAMBAHAN REVISI: Relasi ka Feedback supados dua arah
+  feedbacks      Feedback[]
+
   @@index([schoolId])
   @@index([createdBy])
   @@map("courses")
@@ -404,16 +407,23 @@ model user_answers {
 model Feedback {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
-  moduleId  String   @map("module_id")
+  
+  // Scope diubah ke Course, moduleId dibuat nullable untuk legacy data
+  courseId  String?  @map("course_id")
+  moduleId  String?  @map("module_id")
+
   saran     String   @db.Text
-  kritik    String?  @db.Text
+  masukan   String?  @db.Text   // Menggantikan field kritik
+
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relasi
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module Module? @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([courseId])
   @@index([moduleId])
   @@map("feedbacks")
 }
@@ -537,9 +547,9 @@ model MiniQuiz {
   createdAt        DateTime @default(now()) @map("created_at")
 
   // Relasi
-  content   Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  content  Content            @relation(fields: [contentId], references: [id], onDelete: Cascade)
   questions MiniQuizQuestion[]
-  attempts  MiniQuizAttempt[]
+  attempts MiniQuizAttempt[]
 
   @@index([contentId])
   @@map("mini_quizzes")

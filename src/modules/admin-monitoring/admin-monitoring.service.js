@@ -136,18 +136,39 @@ const getUserEvaluations = async (userId) => {
   }
 }
 
-// 3. Ambil progress SEMUA guru sekaligus
-const getAllUsersModuleProgress = async () => {
+// 3. Ambil progress SEMUA guru sekaligus (di-scope per sekolah untuk pengajar)
+const getAllUsersModuleProgress = async (currentUser = {}) => {
   // Query 1: Ambil semua modul terurut
   const allModules = await prisma.module.findMany({
     orderBy: { urutan: 'asc' },
     select: { id: true, judul: true, urutan: true }
   })
 
-  // Query 2: Ambil semua user role 'guru' beserta progress-nya
+  // SCHOOL-SCOPE FILTER
+  // - admin: tanpa filter (semua sekolah)
+  // - pengajar: hanya guru pada sekolahnya sendiri
+  const userWhere = { role: 'guru' }
+
+  if (currentUser.role === 'pengajar') {
+    const schoolIdPengajar = currentUser.schoolId
+    const sekolahPengajar = currentUser.sekolah
+
+    if (schoolIdPengajar) {
+      // Utamakan filter berdasarkan schoolId (UUID)
+      userWhere.schoolId = schoolIdPengajar
+    } else if (sekolahPengajar) {
+      // Fallback ke field legacy "sekolah"
+      userWhere.sekolah = sekolahPengajar
+    } else {
+      // FAIL CLOSED: pengajar tanpa sekolah tidak boleh melihat data lintas sekolah
+      return []
+    }
+  }
+
+  // Query 2: Ambil user role 'guru' beserta progress-nya (sesuai scope di atas)
   // SESUAI SCHEMA PRISMA: nama relasi di Model User adalah "progress"
   const users = await prisma.user.findMany({
-    where: { role: 'guru' },
+    where: userWhere,
     select: {
       id: true,
       nama: true,

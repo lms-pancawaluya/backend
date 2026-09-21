@@ -38,7 +38,7 @@ const getUserEvaluations = async (req, res) => {
 
 const getAllUsersModuleProgress = async (req, res) => {
   try {
-    const data = await adminMonitoringService.getAllUsersModuleProgress()
+    const data = await adminMonitoringService.getAllUsersModuleProgress(req.user)
 
     return res.status(200).json({
       sukses: true,

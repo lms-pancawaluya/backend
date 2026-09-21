@@ -2,6 +2,7 @@
 
 const prisma = require('../../config/database')
 const notificationService = require('../notifications/notifications.service')
+const progressService = require('../progress/progress.service')
 
 // Helper untuk membuat error dengan status code HTTP
 const createError = (message, statusCode) => {
@@ -161,9 +162,25 @@ const getModuleById = async (id, currentUser = null) => {
     }))
   ]
 
+  // Status completion per tahap (Pre-Test -> Material -> Post-Test).
+  // Memakai single source of truth yang sama dengan endpoint progress
+  // (progressService.hitungStageCompletion) agar tidak menduplikasi logic.
+  const stageMap = currentUser?.id
+    ? await progressService.hitungStageCompletion(currentUser.id, [id])
+    : {}
+
+  const stage = stageMap[id] || {
+    preTestCompleted: false,
+    materialCompleted: false,
+    postTestCompleted: false
+  }
+
   return {
     ...module,
-    evaluations
+    evaluations,
+    preTestCompleted: stage.preTestCompleted,
+    materialCompleted: stage.materialCompleted,
+    postTestCompleted: stage.postTestCompleted
   }
 }
 

@@ -167,7 +167,7 @@ const hitungStageCompletion = async (userId, moduleIds) => {
         }
       },
 
-      contentProgress: {
+      userProgress: {
         where: {
           userId
         },
@@ -251,7 +251,7 @@ const hitungStageCompletion = async (userId, moduleIds) => {
       // Material/content completion
       // --------------------------------------------
       const contentProg =
-        content.contentProgress[0] || null
+        content.userProgress[0] || null
 
       let progressSelesai = false
 

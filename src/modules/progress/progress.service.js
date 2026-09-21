@@ -844,7 +844,7 @@ const markContentComplete = async (
   // ================================================
   if (content.tipe === 'video') {
     const existing =
-      await prisma.user_content_progress.findUnique({
+      await prisma.userContentProgress.findUnique({
         where: {
           userId_contentId: {
             userId,
@@ -869,7 +869,7 @@ const markContentComplete = async (
   const now = new Date()
 
   const saved =
-    await prisma.user_content_progress.upsert({
+    await prisma.userContentProgress.upsert({
       where: {
         userId_contentId: {
           userId,
@@ -974,7 +974,7 @@ const updateContentProgress = async (
   // Ambil existing progress
   // ================================================
   const existing =
-    await prisma.user_content_progress.findUnique({
+    await prisma.userContentProgress.findUnique({
       where: {
         userId_contentId: {
           userId,
@@ -1021,7 +1021,7 @@ const updateContentProgress = async (
   // Simpan
   // ================================================
   const saved =
-    await prisma.user_content_progress.upsert({
+    await prisma.userContentProgress.upsert({
       where: {
         userId_contentId: {
           userId,

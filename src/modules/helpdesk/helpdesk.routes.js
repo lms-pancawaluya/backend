@@ -4,6 +4,9 @@ const helpdeskController = require('./helpdesk.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
 const roleMiddleware = require('../../middlewares/role.middleware')
 
+// Endpoint master daftar kategori (Wajib ditaruh sebelum route params)
+router.get('/tickets/categories', authMiddleware, helpdeskController.getCategories)
+
 // Endpoint umum (Guru / Admin / Pengajar)
 router.post('/tickets', authMiddleware, helpdeskController.createTicket)
 router.get('/tickets/my', authMiddleware, helpdeskController.getMyTickets)

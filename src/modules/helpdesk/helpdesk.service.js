@@ -1,7 +1,13 @@
 // src/modules/helpdesk/helpdesk.service.js
 
 const prisma = require('../../config/database')
-const notificationService = require('../notifications/notifications.service') // <-- Import notificationService
+const notificationService = require('../notifications/notifications.service')
+const { TICKET_CATEGORIES } = require('./helpdesk.constants')
+
+// GET: Daftar Kategori Resmi untuk Helpdesk Ticket
+const getCategories = () => {
+  return TICKET_CATEGORIES
+}
 
 // Generate nomor tiket otomatis yang lebih unik (contoh: TKT-20260826-A8K2)
 const generateTicketNumber = () => {
@@ -16,6 +22,12 @@ const createTicket = async (userId, data) => {
 
   if (!subject || !category || !description) {
     throw new Error('Subject, category, dan description wajib diisi')
+  }
+
+  // VALIDASI KATEGORI: Harus salah satu dari TICKET_CATEGORIES
+  const validCategoryValues = TICKET_CATEGORIES.map((c) => c.value)
+  if (!validCategoryValues.includes(category)) {
+    throw new Error(`Kategori '${category}' tidak valid. Kategori yang diperbolehkan: ${validCategoryValues.join(', ')}`)
   }
 
   const ticketNumber = generateTicketNumber()
@@ -260,6 +272,7 @@ const updateTicketStatus = async (ticketId, status) => {
 }
 
 module.exports = {
+  getCategories,
   createTicket,
   getMyTickets,
   getAllTickets,

@@ -1,5 +1,21 @@
 const helpdeskService = require('./helpdesk.service')
 
+const getCategories = async (req, res) => {
+  try {
+    const hasil = helpdeskService.getCategories()
+
+    return res.status(200).json({
+      sukses: true,
+      data: hasil
+    })
+  } catch (error) {
+    return res.status(500).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 const createTicket = async (req, res) => {
   try {
     const userId = req.user.id
@@ -116,6 +132,7 @@ const updateTicketStatus = async (req, res) => {
 }
 
 module.exports = {
+  getCategories,
   createTicket,
   getMyTickets,
   getAllTickets,

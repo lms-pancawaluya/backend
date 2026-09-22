@@ -18,9 +18,12 @@ const createFeedback = async (req, res) => {
       data: result
     })
   } catch (error) {
-    return res.status(400).json({
+    const statusCode = error.statusCode || 400
+
+    return res.status(statusCode).json({
       sukses: false,
-      pesan: error.message
+      pesan: error.message,
+      ...(error.data && { data: error.data })
     })
   }
 }

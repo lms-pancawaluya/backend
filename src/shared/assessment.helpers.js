@@ -61,6 +61,15 @@ const resolveSubmitDefaults = (assessment) => {
   }
 }
 
+// Helper internal untuk menoleransi variasi nama field dari FE
+const mapOptionsPayload = (options) => {
+  if (!options || !Array.isArray(options)) return []
+  return options.map(opt => ({
+    teksOpsi: opt.teksOpsi || opt.teks || opt.text || opt.label || opt.optionText || '',
+    isCorrect: Boolean(opt.isCorrect || opt.is_correct)
+  }))
+}
+
 // ================================================
 // MODULE / ASSESSMENT LOOKUPS (shared)
 // ================================================
@@ -119,7 +128,8 @@ const getAssessmentById = async (id, tipe) => {
           options: {
             select: {
               id: true,
-              teksOpsi: true
+              teksOpsi: true,
+              isCorrect: true
             }
           }
         }
@@ -180,7 +190,9 @@ const createQuestion = async (assessmentId, tipe, data) => {
     throw new Error('Soal pilihan ganda harus memiliki minimal 2 pilihan jawaban')
   }
 
-  const adaJawabanBenar = options.some(opt => opt.isCorrect === true)
+  const formattedOptions = mapOptionsPayload(options)
+
+  const adaJawabanBenar = formattedOptions.some(opt => opt.isCorrect === true)
   if (!adaJawabanBenar) {
     throw new Error('Harus ada minimal 1 jawaban yang benar')
   }
@@ -192,10 +204,7 @@ const createQuestion = async (assessmentId, tipe, data) => {
       pertanyaan,
       tipe: 'pilihan_ganda',
       options: {
-        create: options.map(opt => ({
-          teksOpsi: opt.teksOpsi,
-          isCorrect: opt.isCorrect || false
-        }))
+        create: formattedOptions
       }
     },
     include: {
@@ -217,18 +226,22 @@ const updateQuestion = async (questionId, data) => {
     throw new Error('Soal tidak ditemukan')
   }
 
+  let formattedOptions = null
   if (options) {
     if (options.length < 2) {
       throw new Error('Soal pilihan ganda harus memiliki minimal 2 pilihan jawaban')
     }
-    const adaJawabanBenar = options.some(opt => opt.isCorrect === true)
+
+    formattedOptions = mapOptionsPayload(options)
+
+    const adaJawabanBenar = formattedOptions.some(opt => opt.isCorrect === true)
     if (!adaJawabanBenar) {
       throw new Error('Harus ada minimal 1 jawaban yang benar')
     }
   }
 
   const updatedQuestion = await prisma.$transaction(async (tx) => {
-    if (options) {
+    if (formattedOptions) {
       await tx.option.deleteMany({
         where: { questionId }
       })
@@ -238,12 +251,9 @@ const updateQuestion = async (questionId, data) => {
       where: { id: questionId },
       data: {
         pertanyaan: pertanyaan || questionAda.pertanyaan,
-        ...(options && {
+        ...(formattedOptions && {
           options: {
-            create: options.map(opt => ({
-              teksOpsi: opt.teksOpsi,
-              isCorrect: opt.isCorrect || false
-            }))
+            create: formattedOptions
           }
         })
       },

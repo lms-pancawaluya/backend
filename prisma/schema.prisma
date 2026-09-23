@@ -82,6 +82,7 @@ model User {
   status       UserStatus @default(aktif) @map("status")
   nip          String?    @unique @map("nip")
   sekolah      String?    @map("sekolah")
+  notificationsEnabled Boolean    @default(true) @map("notifications_enabled")
 
   // Relasi ke MasterSekolah
   schoolId     String?        @map("school_id")

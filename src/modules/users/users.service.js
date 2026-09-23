@@ -27,7 +27,6 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
       sekolahPengajar = dbPengajar?.sekolah
     }
 
-    // Utamakan filter berdasarkan schoolId (UUID)
     if (schoolIdPengajar) {
       whereClause.schoolId = schoolIdPengajar
     } else if (sekolahPengajar) {
@@ -67,6 +66,7 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
       noHp: true,
       fotoProfil: true,
       status: true,
+      notificationsEnabled: true,
       createdAt: true,
       school: {
         select: {
@@ -99,6 +99,7 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
       noHp: user.noHp,
       fotoProfil: user.fotoProfil,
       status: user.status,
+      notificationsEnabled: user.notificationsEnabled,
       createdAt: user.createdAt,
       school: user.school,
       modulSelesai: userProgressList.length
@@ -126,6 +127,7 @@ const getUserById = async (id) => {
       noHp: true,
       fotoProfil: true,
       status: true,
+      notificationsEnabled: true,
       createdAt: true,
       school: {
         select: {
@@ -201,7 +203,6 @@ const updateUser = async (id, data, currentUser) => {
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
   if (nip !== undefined) payloadToUpdate.nip = nip
 
-  // Sinkronisasi MasterSekolah jika schoolId diupdate
   if (schoolId) {
     const masterSekolah = await prisma.masterSekolah.findUnique({
       where: { id: schoolId }
@@ -249,6 +250,7 @@ const updateUser = async (id, data, currentUser) => {
       noHp: true,
       fotoProfil: true,
       status: true,
+      notificationsEnabled: true,
       createdAt: true,
       school: {
         select: {
@@ -277,7 +279,6 @@ const updateMyProfile = async (userId, data, userRole) => {
   if (nip !== undefined) payloadToUpdate.nip = nip
   if (noHp !== undefined) payloadToUpdate.noHp = noHp
 
-  // Hanya izinkan update sekolah & lokasi jika BUKAN GURU
   if (userRole !== 'guru') {
     if (schoolId) {
       const masterSekolah = await prisma.masterSekolah.findUnique({
@@ -319,6 +320,7 @@ const updateMyProfile = async (userId, data, userRole) => {
       noHp: true,
       fotoProfil: true,
       status: true,
+      notificationsEnabled: true,
       createdAt: true,
       school: {
         select: {
@@ -401,6 +403,40 @@ const adminResetPassword = async (id, passwordBaru) => {
   return { pesan: `Password user ${user.nama} berhasil direset.` }
 }
 
+// ================================================
+// NOTIFICATION PREFERENCE (BARU)
+// ================================================
+const getNotificationPreference = async (userId) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { notificationsEnabled: true }
+  })
+
+  if (!user) {
+    throw new Error('User tidak ditemukan')
+  }
+
+  return {
+    notificationsEnabled: user.notificationsEnabled ?? true
+  }
+}
+
+const updateNotificationPreference = async (userId, notificationsEnabled) => {
+  if (typeof notificationsEnabled !== 'boolean') {
+    throw new Error('Field notificationsEnabled harus berupa boolean (true/false)')
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: { notificationsEnabled },
+    select: { notificationsEnabled: true }
+  })
+
+  return {
+    notificationsEnabled: updatedUser.notificationsEnabled
+  }
+}
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -408,5 +444,7 @@ module.exports = {
   updateMyProfile,
   deleteUser,
   updatePassword,
-  adminResetPassword
+  adminResetPassword,
+  getNotificationPreference,
+  updateNotificationPreference
 }

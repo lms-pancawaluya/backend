@@ -33,6 +33,17 @@ router.put('/profile/me/password',
   usersController.updatePassword
 )
 
+// ROUTE NOTIFICATION PREFERENCE (BARU)
+router.get('/profile/me/notification-preference',
+  authMiddleware,
+  usersController.getNotificationPreference
+)
+
+router.patch('/profile/me/notification-preference',
+  authMiddleware,
+  usersController.updateNotificationPreference
+)
+
 // ================================================
 // ID ROUTES (Dipasang di bawah)
 // ================================================

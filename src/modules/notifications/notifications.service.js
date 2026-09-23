@@ -10,12 +10,12 @@ const getMyNotifications = async (userId) => {
   return await prisma.notification.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
-    take: 30 // Ambil 30 notifikasi terbaru
+    take: 30
   })
 }
 
 /**
- * Hitung jumlah notifikasi yang belum dibaca (untuk badge merah/counter di FE)
+ * Hitung jumlah notifikasi yang belum dibaca
  */
 const getUnreadCount = async (userId) => {
   const count = await prisma.notification.count({
@@ -39,7 +39,6 @@ const markAsRead = async (notificationId, userId) => {
     throw new Error('Notifikasi tidak ditemukan')
   }
 
-  // Cek apakah notifikasi ini milik user yang sedang request
   if (notif.userId !== userId) {
     throw new Error('Kamu tidak memiliki akses ke notifikasi ini')
   }
@@ -65,9 +64,20 @@ const markAllAsRead = async (userId) => {
 }
 
 /**
- * HELPER INTERNAL: Membuat Notifikasi Baru
+ * HELPER INTERNAL: Membuat Notifikasi Baru (Memperhatikan Preference User)
  */
 const createNotification = async ({ userId, title, message, type, linkUrl = null }) => {
+  // Cek apakah user mengaktifkan notifikasi
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { notificationsEnabled: true }
+  })
+
+  // Jika user mematikan notifikasi, abaikan pembuatan notifikasi
+  if (user && user.notificationsEnabled === false) {
+    return null
+  }
+
   return await prisma.notification.create({
     data: {
       userId,
@@ -81,16 +91,37 @@ const createNotification = async ({ userId, title, message, type, linkUrl = null
 
 /**
  * HELPER INTERNAL: Kirim Notifikasi Masal (Broadcasting)
- * REVISI: Generasi UUID manual per item agar PostgreSQL tidak throw error NULL ID
+ * Filter hanya ke user yang mengaktifkan notificationsEnabled
  */
 const createManyNotifications = async (notificationsArray) => {
-  const formattedData = notificationsArray.map((notif) => ({
-    id: crypto.randomUUID(), // Inject UUID manual untuk tiap item
-    ...notif
-  }))
+  if (!notificationsArray || notificationsArray.length === 0) return
+
+  // Ambil semua userId dari array
+  const userIds = [...new Set(notificationsArray.map((n) => n.userId))]
+
+  // Ambil daftar user yang mengaktifkan notifikasi
+  const activeUsers = await prisma.user.findMany({
+    where: {
+      id: { in: userIds },
+      notificationsEnabled: true
+    },
+    select: { id: true }
+  })
+
+  const activeUserIds = new Set(activeUsers.map((u) => u.id))
+
+  // Filter hanya notifikasi milik user yang aktif
+  const filteredNotifications = notificationsArray
+    .filter((notif) => activeUserIds.has(notif.userId))
+    .map((notif) => ({
+      id: crypto.randomUUID(),
+      ...notif
+    }))
+
+  if (filteredNotifications.length === 0) return
 
   return await prisma.notification.createMany({
-    data: formattedData
+    data: filteredNotifications
   })
 }
 

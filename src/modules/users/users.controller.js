@@ -277,6 +277,49 @@ const adminResetPassword = async (req, res) => {
   }
 }
 
+// ================================================
+// GET NOTIFICATION PREFERENCE (BARU)
+// ================================================
+const getNotificationPreference = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const data = await usersService.getNotificationPreference(userId)
+
+    return res.status(200).json({
+      sukses: true,
+      data
+    })
+  } catch (error) {
+    return res.status(500).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
+// UPDATE NOTIFICATION PREFERENCE (BARU)
+// ================================================
+const updateNotificationPreference = async (req, res) => {
+  try {
+    const userId = req.user.id
+    const { notificationsEnabled } = req.body
+
+    const data = await usersService.updateNotificationPreference(userId, notificationsEnabled)
+
+    return res.status(200).json({
+      sukses: true,
+      data
+    })
+  } catch (error) {
+    const statusCode = error.message.includes('boolean') ? 400 : 500
+    return res.status(statusCode).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
 module.exports = {
   getAllUsers,
   getUserById,
@@ -285,5 +328,7 @@ module.exports = {
   getMyProfile,
   updateMyProfile,
   updatePassword,
-  adminResetPassword
+  adminResetPassword,
+  getNotificationPreference,
+  updateNotificationPreference
 }

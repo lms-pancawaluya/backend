@@ -4,6 +4,7 @@ const prisma = require('../../config/database')
 const progressService = require('../progress/progress.service')
 const uploadService = require('../upload/upload.service')
 const pdfService = require('./certificate-pdf.service')
+const crypto = require('crypto')
 
 // ================================================
 // HELPER — Error dengan status code HTTP
@@ -16,16 +17,7 @@ const createError = (message, statusCode) => {
 
 // ================================================
 // HELPER — Generate nomor sertifikat unik
-//
-// Format: PANC-<TAHUN>-<8 karakter acak uppercase>
-// Contoh: PANC-2026-4F9A2C1D
-//
-// - Tidak bergantung pada nama user.
-// - Mengandalkan crypto.randomBytes untuk mencegah duplikasi.
-// - Unique constraint di DB tetap menjadi safety net.
 // ================================================
-const crypto = require('crypto')
-
 const generateNomorSertifikat = () => {
   const tahun = new Date().getFullYear()
 
@@ -40,10 +32,6 @@ const generateNomorSertifikat = () => {
 
 // ================================================
 // HELPER — Baca snapshot nama dari profile/user
-//
-// Source of truth nama profile saat ini adalah
-// User.nama (dipakai authMiddleware, users.service, dll).
-// Tidak ada field nama profile lain di schema.
 // ================================================
 const ambilNamaUser = async (userId) => {
   const user = await prisma.user.findUnique({
@@ -59,15 +47,7 @@ const ambilNamaUser = async (userId) => {
 }
 
 // ================================================
-// HELPER — Hitung completion setiap module pada
-// sebuah course memakai logic progress existing.
-//
-// Memakai progressService.hitungStageCompletion
-// agar TIDAK membuat definisi completion baru.
-//
-// Sebuah module dianggap selesai bila seluruh stage
-// yang tersedia selesai:
-//   preTestCompleted && materialCompleted && postTestCompleted
+// HELPER — Hitung completion setiap module pada course
 // ================================================
 const hitungCourseCompletion = async (userId, courseId) => {
   const modules = await prisma.module.findMany({
@@ -77,9 +57,6 @@ const hitungCourseCompletion = async (userId, courseId) => {
 
   const totalModules = modules.length
 
-  // Course tanpa module: TIDAK otomatis eligible.
-  // Tanpa module, tidak ada pekerjaan yang dapat diselesaikan,
-  // sehingga course dianggap belum 100%.
   if (totalModules === 0) {
     return {
       totalModules: 0,
@@ -139,12 +116,6 @@ const hitungCourseCompletion = async (userId, courseId) => {
 
 // ================================================
 // HELPER — Validasi akses user terhadap course
-//
-// Mengikuti aturan school-scope yang SUDAH ADA di
-// courses.service.getCourseById:
-// - Course global (schoolId null) -> boleh.
-// - Course sekolah -> admin bebas; non-admin hanya
-//   bila schoolId sama.
 // ================================================
 const pastikanAksesCourse = (course, user) => {
   if (course.schoolId) {
@@ -186,8 +157,6 @@ const getMyCertificates = async (userId) => {
 
 // ================================================
 // GET CERTIFICATE BY ID — Detail satu sertifikat
-//
-// Hanya pemilik sertifikat (atau admin) yang boleh.
 // ================================================
 const getCertificateById = async (certificateId, user) => {
   const cert = await prisma.certificate.findUnique({
@@ -225,17 +194,8 @@ const getCertificateById = async (certificateId, user) => {
 
 // ================================================
 // CLAIM CERTIFICATE — Klaim sertifikat course
-//
-// Idempotent:
-// - Course < 100% -> ditolak, TIDAK membuat sertifikat.
-// - Course 100% & belum ada -> buat baru.
-// - Sudah ada -> kembalikan yang existing (tanpa
-//   membuat duplikat / nomor baru / mengubah issuedAt).
 // ================================================
 const claimCertificate = async (userId, courseId) => {
-  // ================================================
-  // 1. Pastikan course exists
-  // ================================================
   const course = await prisma.course.findUnique({
     where: { id: courseId },
     select: {
@@ -250,9 +210,6 @@ const claimCertificate = async (userId, courseId) => {
     throw createError('Course tidak ditemukan', 404)
   }
 
-  // ================================================
-  // 2. Authorization (school-scope, pola existing)
-  // ================================================
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true, schoolId: true }
@@ -264,9 +221,6 @@ const claimCertificate = async (userId, courseId) => {
 
   pastikanAksesCourse(course, user)
 
-  // ================================================
-  // 3. Course harus mengaktifkan sertifikat
-  // ================================================
   if (!course.hasCertificate) {
     throw createError(
       'Course ini tidak menyediakan sertifikat',
@@ -274,11 +228,6 @@ const claimCertificate = async (userId, courseId) => {
     )
   }
 
-  // ================================================
-  // 4. Certificate sudah ada? -> idempotent return
-  //    (dicek lebih dulu agar claim berulang tidak
-  //    menghitung ulang dan tetap idempotent)
-  // ================================================
   const existing = await prisma.certificate.findUnique({
     where: {
       userId_courseId: { userId, courseId }
@@ -305,9 +254,6 @@ const claimCertificate = async (userId, courseId) => {
     }
   }
 
-  // ================================================
-  // 5. Hitung completion course (pakai logic existing)
-  // ================================================
   const completion = await hitungCourseCompletion(userId, courseId)
 
   if (!completion.isCompleted) {
@@ -317,15 +263,8 @@ const claimCertificate = async (userId, courseId) => {
     )
   }
 
-  // ================================================
-  // 6. Ambil snapshot nama dari profile user
-  // ================================================
   const recipientName = await ambilNamaUser(userId)
 
-  // ================================================
-  // 7. Buat sertifikat (unique constraint sebagai
-  //    safety net anti-duplikat saat race condition)
-  // ================================================
   try {
     const cert = await prisma.certificate.create({
       data: {
@@ -334,8 +273,6 @@ const claimCertificate = async (userId, courseId) => {
         recipientName,
         nomorSertifikat: generateNomorSertifikat(),
         status: 'issued',
-        // fileUrl & templateId null sampai template
-        // Canva / PDF generation tersedia.
         fileUrl: null,
         templateId: null
       },
@@ -359,8 +296,6 @@ const claimCertificate = async (userId, courseId) => {
       }
     }
   } catch (error) {
-    // Race condition: dua request claim bersamaan.
-    // Unique constraint (userId, courseId) mencegah duplikat.
     if (error.code === 'P2002') {
       const raceCert = await prisma.certificate.findUnique({
         where: {
@@ -394,32 +329,11 @@ const claimCertificate = async (userId, courseId) => {
 }
 
 // ================================================
-// UPLOAD / UPDATE TEMPLATE CERTIFICATE COURSE
-//
-// Template PDF (hasil export Canva) di-upload admin
-// dan disimpan di storage existing (Cloudinary).
-//
-// - Tidak disimpan di local filesystem.
-// - Terhubung ke course via kolom template di Course.
-// - Course yang sudah punya template -> overwrite
-//   (public_id tetap sama, sehingga URL template
-//   di course di-refresh).
-//
-// Authorization mengikuti pola existing:
-// - admin: bebas.
-// - non-admin: hanya course pada sekolahnya
-//   (school-scope, sama seperti courses.service).
+// UPLOAD TEMPLATE CERTIFICATE COURSE (Admin)
 // ================================================
-const uploadCertificateTemplate = async (
-  courseId,
-  file,
-  user
-) => {
+const uploadCertificateTemplate = async (courseId, file, user) => {
   if (!file) {
-    throw createError(
-      'File template PDF wajib diunggah',
-      400
-    )
+    throw createError('File template PDF wajib diunggah', 400)
   }
 
   const course = await prisma.course.findUnique({
@@ -436,22 +350,16 @@ const uploadCertificateTemplate = async (
     throw createError('Course tidak ditemukan', 404)
   }
 
-  // Authorization (school-scope, pola existing).
   pastikanAksesCourse(course, user)
 
   if (!course.hasCertificate) {
-    throw createError(
-      'Course ini tidak menyediakan sertifikat',
-      400
-    )
+    throw createError('Course ini tidak menyediakan sertifikat', 400)
   }
 
-  // Upload template ke Cloudinary.
-  const { url, publicId } =
-    await uploadService.uploadCertificateTemplate(
-      file,
-      courseId
-    )
+  const { url, publicId } = await uploadService.uploadCertificateTemplate(
+    file,
+    courseId
+  )
 
   const updated = await prisma.course.update({
     where: { id: courseId },
@@ -472,10 +380,6 @@ const uploadCertificateTemplate = async (
 
 // ================================================
 // GET TEMPLATE CERTIFICATE COURSE
-//
-// Mengembalikan metadata template milik course.
-// Template TIDAK menyimpan data personal sehingga
-// aman dilihat oleh user terautentikasi.
 // ================================================
 const getCertificateTemplate = async (courseId, user) => {
   const course = await prisma.course.findUnique({
@@ -494,7 +398,6 @@ const getCertificateTemplate = async (courseId, user) => {
     throw createError('Course tidak ditemukan', 404)
   }
 
-  // Authorization akses course.
   if (user) {
     pastikanAksesCourse(course, user)
   }
@@ -511,21 +414,6 @@ const getCertificateTemplate = async (courseId, user) => {
 
 // ================================================
 // GENERATE CERTIFICATE (PDF personal)
-//
-// Alur:
-// 1. Ambil certificate milik user (authorization).
-// 2. Bila certificate.fileUrl sudah ada -> tidak
-//    generate ulang (idempotent) kecuali diminta
-//    eksplisit (force = true).
-// 3. Course harus memiliki template -> jika tidak,
-//    tolak dengan error jelas (TIDAK generate).
-// 4. Render PDF: template + overlay data certificate.
-// 5. Upload hasil ke storage, simpan ke certificate.fileUrl,
-//    set status menjadi 'generated'.
-//
-// Semua data personal diambil dari certificate record
-// (recipientName, nomorSertifikat, issuedAt) — bukan
-// dari request FE.
 // ================================================
 const generateCertificate = async (
   certificateId,
@@ -551,7 +439,6 @@ const generateCertificate = async (
     throw createError('Sertifikat tidak ditemukan', 404)
   }
 
-  // Authorization: hanya pemilik (atau admin).
   if (cert.userId !== user.id && user.role !== 'admin') {
     throw createError(
       'Kamu tidak memiliki akses ke sertifikat ini',
@@ -559,8 +446,6 @@ const generateCertificate = async (
     )
   }
 
-  // Bila sudah ada file URL -> jangan generate ulang
-  // tanpa kebutuhan eksplisit.
   if (cert.fileUrl && !force) {
     return {
       status: 'already_generated',
@@ -578,7 +463,6 @@ const generateCertificate = async (
     }
   }
 
-  // Course harus punya template.
   const templateUrl = cert.course?.certificateTemplateUrl
 
   if (!templateUrl) {
@@ -588,11 +472,9 @@ const generateCertificate = async (
     )
   }
 
-  // Ambil buffer template dari storage.
   const templatePdfBuffer =
     await uploadService.downloadFileBuffer(templateUrl)
 
-  // Render PDF personal.
   const pdfBuffer = await pdfService.generateCertificatePdf({
     templatePdfBuffer,
     overlayConfig: cert.course?.certificateOverlay || null,
@@ -604,17 +486,11 @@ const generateCertificate = async (
     }
   })
 
-  // Upload hasil ke storage.
   const fileUrl = await uploadService.uploadCertificateFile(
     pdfBuffer,
     cert.nomorSertifikat
   )
 
-  // Simpan hasil ke certificate.
-  //
-  // FIX:
-  // templateId harus menyimpan ID template certificate
-  // yang digunakan oleh course, bukan courseId.
   const updated = await prisma.certificate.update({
     where: { id: cert.id },
     data: {
@@ -643,9 +519,6 @@ const generateCertificate = async (
   }
 }
 
-// ================================================
-// EXPORT
-// ================================================
 module.exports = {
   getMyCertificates,
   getCertificateById,
@@ -653,7 +526,6 @@ module.exports = {
   uploadCertificateTemplate,
   getCertificateTemplate,
   generateCertificate,
-  // diekspor untuk kebutuhan pengujian/logika bersama
   hitungCourseCompletion,
   generateNomorSertifikat
 }

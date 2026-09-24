@@ -1,13 +1,20 @@
+// src/modules/upload/upload.service.js
+
 const supabase = require('../../config/supabase')
-const cloudinary = require('cloudinary').v2 // 1. Import Cloudinary
+const cloudinary = require('cloudinary').v2
 
 // Panggil config agar membaca CLOUDINARY_URL di .env
 cloudinary.config()
 
 // ================================================
-// UPLOAD FOTO PROFIL
+// UPLOAD FOTO PROFIL (Supabase)
 // ================================================
 const uploadFotoProfil = async (file, userId) => {
+  // Validasi mimetype harus berupa gambar (JPG, PNG, WebP)
+  if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+    throw new Error('Foto profil wajib berformat gambar (JPG, PNG, WebP)!')
+  }
+
   const fileExt = file.originalname.split('.').pop()
   const fileName = `${userId}-${Date.now()}.${fileExt}`
   const filePath = `profil/${fileName}`
@@ -31,7 +38,7 @@ const uploadFotoProfil = async (file, userId) => {
 }
 
 // ================================================
-// UPLOAD DOKUMEN RTL (PDF)
+// UPLOAD DOKUMEN RTL (PDF) (Supabase)
 // ================================================
 const uploadRtl = async (file, userId) => {
   if (file.mimetype !== 'application/pdf') {
@@ -60,7 +67,7 @@ const uploadRtl = async (file, userId) => {
 }
 
 // ================================================
-// UPLOAD PDF MODUL LMS (CLOUDINARY) — [BARU]
+// UPLOAD PDF MODUL LMS (Cloudinary)
 // ================================================
 const uploadPdfModul = async (file) => {
   if (file.mimetype !== 'application/pdf') {
@@ -75,7 +82,7 @@ const uploadPdfModul = async (file) => {
       },
       (error, result) => {
         if (error) return reject(new Error(`Upload Cloudinary gagal: ${error.message}`))
-        resolve(result.secure_url) // Kembalikan Direct URL PDF
+        resolve(result.secure_url)
       }
     )
     stream.end(file.buffer)
@@ -84,11 +91,6 @@ const uploadPdfModul = async (file) => {
 
 // ================================================
 // UPLOAD TEMPLATE SERTIFIKAT (PDF) — Cloudinary
-//
-// Template PDF hasil export Canva yang di-upload admin.
-// Disimpan di folder terpisah dari sertifikat personal.
-// Mengembalikan { url, publicId } agar Course dapat
-// menyimpan referensi template-nya.
 // ================================================
 const uploadCertificateTemplate = async (file, courseId) => {
   if (file.mimetype !== 'application/pdf') {
@@ -121,9 +123,6 @@ const uploadCertificateTemplate = async (file, courseId) => {
 
 // ================================================
 // UPLOAD SERTIFIKAT PERSONAL (PDF) — Cloudinary
-//
-// Hasil generate PDF personal per certificate.
-// public_id memakai nomor sertifikat agar unik.
 // ================================================
 const uploadCertificateFile = async (pdfBuffer, certificateNumber) => {
   return new Promise((resolve, reject) => {
@@ -149,9 +148,6 @@ const uploadCertificateFile = async (pdfBuffer, certificateNumber) => {
 
 // ================================================
 // DOWNLOAD FILE (Buffer) dari URL
-//
-// Dipakai untuk mengambil template PDF dari Cloudinary
-// sebelum di-render. Node 18+ menyediakan fetch global.
 // ================================================
 const downloadFileBuffer = async (url) => {
   const response = await fetch(url)
@@ -168,7 +164,7 @@ const downloadFileBuffer = async (url) => {
 }
 
 // ================================================
-// DELETE FILE dari Storage
+// DELETE FILE dari Storage (Supabase)
 // ================================================
 const deleteFile = async (bucket, filePath) => {
   const { error } = await supabase.storage
@@ -185,7 +181,7 @@ const deleteFile = async (bucket, filePath) => {
 module.exports = {
   uploadFotoProfil,
   uploadRtl,
-  uploadPdfModul, // Export fungsi baru
+  uploadPdfModul,
   uploadCertificateTemplate,
   uploadCertificateFile,
   downloadFileBuffer,

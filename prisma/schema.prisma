@@ -182,6 +182,8 @@ model Module {
   deskripsi        String            @db.Text
   aspekPancawaluya AspekPancawaluya? @default(umum) @map("aspek_pancawaluya")
   urutan           Int
+  tanggalMulai     DateTime?         @map("tanggal_mulai")
+  tanggalSelesai   DateTime?         @map("tanggal_selesai")
   createdAt        DateTime          @default(now()) @map("created_at")
 
   // Relasi

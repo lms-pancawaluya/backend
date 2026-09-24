@@ -201,7 +201,15 @@ const updateUser = async (id, data, currentUser) => {
   }
 
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
-  if (nip !== undefined) payloadToUpdate.nip = nip
+  
+  // Handling NIP Unique Check
+  if (nip !== undefined && nip !== userAda.nip) {
+    if (nip) {
+      const nipSudahAda = await prisma.user.findUnique({ where: { nip } })
+      if (nipSudahAda) throw new Error('NIP sudah digunakan oleh user lain')
+    }
+    payloadToUpdate.nip = nip
+  }
 
   if (schoolId) {
     const masterSekolah = await prisma.masterSekolah.findUnique({
@@ -264,7 +272,7 @@ const updateUser = async (id, data, currentUser) => {
 }
 
 // ================================================
-// UPDATE MY PROFILE (DIBATASI KHUSUS ROLE GURU)
+// UPDATE MY PROFILE
 // ================================================
 const updateMyProfile = async (userId, data, userRole) => {
   const { nama, email, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp } = data
@@ -274,11 +282,15 @@ const updateMyProfile = async (userId, data, userRole) => {
 
   const payloadToUpdate = {}
 
-  if (nama) payloadToUpdate.nama = nama
+  // Poin 4: Jika role adalah 'guru', nama dilarang diubah sendiri
+  if (userRole !== 'guru') {
+    if (nama) payloadToUpdate.nama = nama
+  }
+
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
-  if (nip !== undefined) payloadToUpdate.nip = nip
   if (noHp !== undefined) payloadToUpdate.noHp = noHp
 
+  // Poin 4: Guru dilarang mengubah sekolah secara mandiri
   if (userRole !== 'guru') {
     if (schoolId) {
       const masterSekolah = await prisma.masterSekolah.findUnique({
@@ -295,6 +307,14 @@ const updateMyProfile = async (userId, data, userRole) => {
       if (kotaKab !== undefined) payloadToUpdate.kotaKab = kotaKab
       if (kecamatan !== undefined) payloadToUpdate.kecamatan = kecamatan
     }
+  }
+
+  if (nip !== undefined && nip !== userAda.nip) {
+    if (nip) {
+      const nipSudahAda = await prisma.user.findUnique({ where: { nip } })
+      if (nipSudahAda) throw new Error('NIP sudah digunakan oleh user lain')
+    }
+    payloadToUpdate.nip = nip
   }
 
   if (email && email !== userAda.email) {
@@ -404,7 +424,7 @@ const adminResetPassword = async (id, passwordBaru) => {
 }
 
 // ================================================
-// NOTIFICATION PREFERENCE (BARU)
+// NOTIFICATION PREFERENCE
 // ================================================
 const getNotificationPreference = async (userId) => {
   const user = await prisma.user.findUnique({

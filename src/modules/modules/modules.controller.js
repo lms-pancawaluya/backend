@@ -38,7 +38,7 @@ const getModuleById = async (req, res) => {
 
 const createModule = async (req, res) => {
   try {
-    const { courseId, judul, deskripsi, aspekPancawaluya, urutan } = req.body
+    const { courseId, judul, deskripsi, aspekPancawaluya, urutan, tanggalMulai, tanggalSelesai } = req.body
 
     if (!courseId || !judul || !deskripsi || !urutan) {
       return res.status(400).json({
@@ -62,7 +62,9 @@ const createModule = async (req, res) => {
       judul,
       deskripsi,
       aspekPancawaluya,
-      urutan: Number(urutan)
+      urutan: Number(urutan),
+      tanggalMulai,
+      tanggalSelesai
     }, req.user)
 
     return res.status(201).json({
@@ -81,7 +83,7 @@ const createModule = async (req, res) => {
 const updateModule = async (req, res) => {
   try {
     const { id } = req.params
-    const { courseId, judul, deskripsi, aspekPancawaluya, urutan } = req.body
+    const { courseId, judul, deskripsi, aspekPancawaluya, urutan, tanggalMulai, tanggalSelesai } = req.body
 
     if (aspekPancawaluya) {
       const aspekValid = ['cageur', 'bageur', 'bener', 'pinter', 'singer', 'umum']
@@ -98,7 +100,9 @@ const updateModule = async (req, res) => {
       judul,
       deskripsi,
       aspekPancawaluya,
-      urutan: urutan ? Number(urutan) : undefined
+      urutan: urutan ? Number(urutan) : undefined,
+      tanggalMulai,
+      tanggalSelesai
     }, req.user)
 
     return res.status(200).json({

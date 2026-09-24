@@ -11,9 +11,8 @@ const createError = (message, statusCode) => {
   return error
 }
 
-// Helper otorisasi akses Course induk
-const validateCourseAccess = async (courseId, user) => {
-  // 🟢 Jika modul tidak terikat ke course manapun (null/undefined), izinkan pengelola
+// Helper otorisasi akses Course induk & validasi tanggal
+const validateCourseAccess = async (courseId, user, tanggalMulai = null, tanggalSelesai = null) => {
   if (!courseId) return null
 
   const course = await prisma.course.findUnique({
@@ -25,14 +24,22 @@ const validateCourseAccess = async (courseId, user) => {
   }
 
   // Admin bebas mengelola semua modul
-  if (user.role === 'admin') return course
+  if (user.role !== 'admin') {
+    const isOwner = course.createdBy === user.id
+    const isSameSchool = course.schoolId && course.schoolId === user.schoolId
 
-  // Pengajar hanya bisa mengelola jika dia pembuatnya atau berada di sekolah yang sama
-  const isOwner = course.createdBy === user.id
-  const isSameSchool = course.schoolId && course.schoolId === user.schoolId
+    if (!isOwner && !isSameSchool) {
+      throw createError('Kamu tidak memiliki akses untuk mengelola modul pada Course ini', 403)
+    }
+  }
 
-  if (!isOwner && !isSameSchool) {
-    throw createError('Kamu tidak memiliki akses untuk mengelola modul pada Course ini', 403)
+  // Validasi: Tanggal modul harus berada di dalam periode Course (jika course punya tanggal)
+  if (tanggalMulai && course.tanggalMulai && new Date(tanggalMulai) < new Date(course.tanggalMulai)) {
+    throw createError('Tanggal mulai modul tidak boleh lebih awal dari tanggal mulai Course', 400)
+  }
+
+  if (tanggalSelesai && course.tanggalSelesai && new Date(tanggalSelesai) > new Date(course.tanggalSelesai)) {
+    throw createError('Tanggal selesai modul tidak boleh melebihi tanggal selesai Course', 400)
   }
 
   return course
@@ -58,12 +65,16 @@ const getAllModules = async (query = {}, currentUser = null) => {
       deskripsi: true,
       aspekPancawaluya: true,
       urutan: true,
+      tanggalMulai: true,
+      tanggalSelesai: true,
       createdAt: true,
       course: {
         select: {
           id: true,
           judul: true,
-          schoolId: true
+          schoolId: true,
+          tanggalMulai: true,
+          tanggalSelesai: true
         }
       },
       _count: {
@@ -96,7 +107,9 @@ const getModuleById = async (id, currentUser = null) => {
       course: {
         select: {
           id: true,
-          schoolId: true
+          schoolId: true,
+          tanggalMulai: true,
+          tanggalSelesai: true
         }
       },
       contents: {
@@ -144,7 +157,6 @@ const getModuleById = async (id, currentUser = null) => {
     throw createError('Modul tidak ditemukan', 404)
   }
 
-  // Validasi Hak Akses Baca untuk Scope Sekolah
   if (module.course && module.course.schoolId && currentUser && currentUser.role !== 'admin') {
     if (module.course.schoolId !== currentUser.schoolId) {
       throw createError('Kamu tidak memiliki akses ke modul sekolah ini', 403)
@@ -162,9 +174,6 @@ const getModuleById = async (id, currentUser = null) => {
     }))
   ]
 
-  // Status completion per tahap (Pre-Test -> Material -> Post-Test).
-  // Memakai single source of truth yang sama dengan endpoint progress
-  // (progressService.hitungStageCompletion) agar tidak menduplikasi logic.
   const stageMap = currentUser?.id
     ? await progressService.hitungStageCompletion(currentUser.id, [id])
     : {}
@@ -188,16 +197,14 @@ const getModuleById = async (id, currentUser = null) => {
 // CREATE MODULE
 // ================================================
 const createModule = async (data, currentUser) => {
-  const { courseId, judul, deskripsi, aspekPancawaluya, urutan } = data
+  const { courseId, judul, deskripsi, aspekPancawaluya, urutan, tanggalMulai, tanggalSelesai } = data
 
   if (!courseId) {
     throw createError('courseId wajib disertakan', 400)
   }
 
-  // Validasi Hak Akses Pengajar/Admin ke Course Induk
-  const parentCourse = await validateCourseAccess(courseId, currentUser)
+  const parentCourse = await validateCourseAccess(courseId, currentUser, tanggalMulai, tanggalSelesai)
 
-  // Pengecekan urutan unik terbatas per Course
   const urutanSudahAda = await prisma.module.findFirst({
     where: { courseId, urutan }
   })
@@ -212,15 +219,15 @@ const createModule = async (data, currentUser) => {
       judul,
       deskripsi,
       aspekPancawaluya: aspekPancawaluya || 'umum',
-      urutan
+      urutan,
+      tanggalMulai: tanggalMulai ? new Date(tanggalMulai) : null,
+      tanggalSelesai: tanggalSelesai ? new Date(tanggalSelesai) : null
     }
   })
 
-  // Broadcast Notifikasi Ter-target ke Guru
   try {
     const teacherWhere = { role: 'guru' }
     
-    // Jika Course khusus sekolah -> HANYA kirim ke Guru dari sekolah yang sama
     if (parentCourse && parentCourse.schoolId) {
       teacherWhere.schoolId = parentCourse.schoolId
     }
@@ -252,7 +259,7 @@ const createModule = async (data, currentUser) => {
 // UPDATE MODULE
 // ================================================
 const updateModule = async (id, data, currentUser) => {
-  const { courseId, judul, deskripsi, aspekPancawaluya, urutan } = data
+  const { courseId, judul, deskripsi, aspekPancawaluya, urutan, tanggalMulai, tanggalSelesai } = data
 
   const moduleAda = await prisma.module.findUnique({
     where: { id }
@@ -262,16 +269,10 @@ const updateModule = async (id, data, currentUser) => {
     throw createError('Modul tidak ditemukan', 404)
   }
 
-  // 🟢 PERBAIKAN 2: Validasi hanya jika modul asal punya courseId
-  if (moduleAda.courseId) {
-    await validateCourseAccess(moduleAda.courseId, currentUser)
-  }
-
   const targetCourseId = courseId !== undefined ? courseId : moduleAda.courseId
 
-  // Jika mencoba memindahkan modul ke Course lain, validasi akses ke Course tujuan
-  if (courseId && courseId !== moduleAda.courseId) {
-    await validateCourseAccess(courseId, currentUser)
+  if (targetCourseId) {
+    await validateCourseAccess(targetCourseId, currentUser, tanggalMulai, tanggalSelesai)
   }
 
   if (urutan && (urutan !== moduleAda.urutan || targetCourseId !== moduleAda.courseId)) {
@@ -297,7 +298,9 @@ const updateModule = async (id, data, currentUser) => {
       ...(judul && { judul }),
       ...(deskripsi && { deskripsi }),
       ...(aspekPancawaluya && { aspekPancawaluya }),
-      ...(urutan && { urutan })
+      ...(urutan && { urutan }),
+      ...(tanggalMulai !== undefined && { tanggalMulai: tanggalMulai ? new Date(tanggalMulai) : null }),
+      ...(tanggalSelesai !== undefined && { tanggalSelesai: tanggalSelesai ? new Date(tanggalSelesai) : null })
     }
   })
 
@@ -316,7 +319,6 @@ const deleteModule = async (id, currentUser) => {
     throw createError('Modul tidak ditemukan', 404)
   }
 
-  // 🟢 PERBAIKAN 3: Validasi hanya jika modul punya courseId
   if (moduleAda.courseId) {
     await validateCourseAccess(moduleAda.courseId, currentUser)
   }

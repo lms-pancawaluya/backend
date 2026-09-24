@@ -1,6 +1,10 @@
+// src/modules/guru/guru.service.js
+
 const prisma = require('../../config/database')
 
 const findGuruByNip = async (nip) => {
+  if (!nip) return null
+
   return await prisma.masterGuru.findUnique({
     where: { 
       nip: String(nip).trim() 
@@ -9,14 +13,25 @@ const findGuruByNip = async (nip) => {
 }
 
 const searchSekolahByName = async (keyword, limit = 10) => {
-  if (!keyword) return []
+  const cleanKeyword = String(keyword || '').trim()
+  if (!cleanKeyword) return []
 
   return await prisma.masterSekolah.findMany({
     where: {
-      nama: {
-        contains: keyword,
-        mode: 'insensitive'
-      }
+      OR: [
+        {
+          nama: {
+            contains: cleanKeyword,
+            mode: 'insensitive'
+          }
+        },
+        {
+          npsn: {
+            contains: cleanKeyword,
+            mode: 'insensitive'
+          }
+        }
+      ]
     },
     take: limit,
     select: {
@@ -25,6 +40,9 @@ const searchSekolahByName = async (keyword, limit = 10) => {
       nama: true,
       kotaKab: true,
       kecamatan: true
+    },
+    orderBy: {
+      nama: 'asc'
     }
   })
 }

@@ -3,7 +3,8 @@
 const prisma = require('../../config/database')
 
 const findGuruByNip = async (nip) => {
-  const cleanNip = String(nip || '').trim()
+  // 🌟 PERBAIKAN: Hapus karakter non-angka (strip, spasi, dll)
+  const cleanNip = String(nip || '').replace(/[^0-9]/g, '').trim()
   if (!cleanNip) return null
 
   return await prisma.masterGuru.findUnique({

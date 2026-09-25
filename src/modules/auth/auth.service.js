@@ -13,10 +13,21 @@ const generateOtp = () => {
 }
 
 // ================================================
+// HELPER — Sanitize NIP (Hanya Angka)
+// ================================================
+const sanitizeNip = (nip) => {
+  if (!nip) return null
+  const cleaned = String(nip).replace(/[^0-9]/g, '').trim()
+  return cleaned.length > 0 ? cleaned : null
+}
+
+// ================================================
 // REGISTER MANDIRI — Daftarkan user baru + kirim OTP
 // ================================================
 const register = async (data) => {
   const { nama, email, password, gelar, nip, schoolId, sekolah, kotaKab, kecamatan } = data
+
+  const cleanNip = sanitizeNip(nip)
 
   // 1. Cek apakah email sudah terdaftar
   const emailSudahAda = await prisma.user.findUnique({
@@ -27,9 +38,9 @@ const register = async (data) => {
   }
 
   // 2. Cek apakah NIP sudah terdaftar (jika NIP diisi)
-  if (nip) {
+  if (cleanNip) {
     const nipSudahAda = await prisma.user.findUnique({
-      where: { nip }
+      where: { nip: cleanNip }
     })
     if (nipSudahAda) {
       throw new Error('NIP sudah terdaftar pada akun lain')
@@ -69,7 +80,7 @@ const register = async (data) => {
       password: hashedPassword,
       role: 'guru',
       gelar: gelar || null,
-      nip: nip || null,
+      nip: cleanNip,
       schoolId: finalSchoolId,
       sekolah: finalSekolah,
       kotaKab: finalKotaKab,
@@ -126,6 +137,12 @@ const registerGuru = async (data, currentUser) => {
     throw new Error('Password minimal 8 karakter')
   }
 
+  // Bersihkan NIP dari karakter strip/spasi
+  const cleanNip = sanitizeNip(nip)
+  if (!cleanNip) {
+    throw new Error('Format NIP tidak valid')
+  }
+
   // 2. Cek ketersediaan email
   const emailExist = await prisma.user.findUnique({ where: { email } })
   if (emailExist) {
@@ -133,14 +150,14 @@ const registerGuru = async (data, currentUser) => {
   }
 
   // 3. Cek ketersediaan NIP pada tabel User
-  const nipExist = await prisma.user.findUnique({ where: { nip: String(nip).trim() } })
+  const nipExist = await prisma.user.findUnique({ where: { nip: cleanNip } })
   if (nipExist) {
     throw new Error('NIP sudah terdaftar pada akun lain')
   }
 
-  // 4. Lookup data profil dari MasterGuru
+  // 4. Lookup data profil dari MasterGuru menggunakan NIP yang sudah dibersihkan
   const masterGuru = await prisma.masterGuru.findUnique({
-    where: { nip: String(nip).trim() }
+    where: { nip: cleanNip }
   })
   if (!masterGuru) {
     throw new Error('Data NIP tidak ditemukan pada Master Guru.')
@@ -264,12 +281,16 @@ const resendOtp = async (email) => {
 const login = async (data) => {
   const { identifier, password } = data
 
-  // 1. Cari user berdasarkan email atau NIP beserta relasi sekolahnya
+  // Bersihkan identifier jika bentuknya angka/NIP dengan strip
+  const cleanIdentifier = sanitizeNip(identifier) || identifier
+
+  // 1. Cari user berdasarkan email atau NIP (bersih/asli) beserta relasi sekolahnya
   const user = await prisma.user.findFirst({
     where: {
       OR: [
         { email: identifier },
-        { nip: identifier }
+        { nip: identifier },
+        { nip: cleanIdentifier }
       ]
     },
     include: {

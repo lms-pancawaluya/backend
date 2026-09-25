@@ -276,21 +276,25 @@ const resendOtp = async (email) => {
 }
 
 // ================================================
-// LOGIN — Bisa pakai email ATAU NIP
+// LOGIN — Bisa pakai email ATAU NIP (Support DB Campuran Strip/Polos)
 // ================================================
 const login = async (data) => {
   const { identifier, password } = data
 
-  // Bersihkan identifier jika bentuknya angka/NIP dengan strip
-  const cleanIdentifier = sanitizeNip(identifier) || identifier
+  if (!identifier || !password) {
+    throw new Error('Email/NIP dan password wajib diisi')
+  }
 
-  // 1. Cari user berdasarkan email atau NIP (bersih/asli) beserta relasi sekolahnya
-  const user = await prisma.user.findFirst({
+  const rawInput = String(identifier).trim()
+  const cleanInput = sanitizeNip(rawInput)
+
+  // 1. Pencarian TINGKAT 1: Match persis (Email / NIP persis sama)
+  let user = await prisma.user.findFirst({
     where: {
       OR: [
-        { email: identifier },
-        { nip: identifier },
-        { nip: cleanIdentifier }
+        { email: rawInput },
+        { nip: rawInput },
+        ...(cleanInput ? [{ nip: cleanInput }] : [])
       ]
     },
     include: {
@@ -304,20 +308,44 @@ const login = async (data) => {
     }
   })
 
+  // 2. Pencarian TINGKAT 2: Jika belum ketemu dan input mengandung angka NIP,
+  // cari ke DB dengan membandingkan NIP polosnya (menghapus strip di data DB)
+  if (!user && cleanInput) {
+    const allUsersWithNip = await prisma.user.findMany({
+      where: {
+        nip: { not: null }
+      },
+      include: {
+        school: {
+          select: {
+            id: true,
+            nama: true,
+            npsn: true
+          }
+        }
+      }
+    })
+
+    user = allUsersWithNip.find(u => sanitizeNip(u.nip) === cleanInput)
+  }
+
+  // 3. Validasi Keberadaan User
   if (!user) {
     throw new Error('Email/NIP atau password salah')
   }
 
+  // 4. Validasi Status Verifikasi
   if (!user.isVerified) {
     throw new Error('Akun kamu belum diverifikasi. Silakan cek email untuk kode OTP.')
   }
 
+  // 5. Validasi Password
   const passwordCocok = await bcrypt.compare(password, user.password)
   if (!passwordCocok) {
     throw new Error('Email/NIP atau password salah')
   }
 
-  // 4. Generate JWT token (Memasukkan schoolId ke payload)
+  // 6. Generate JWT Token
   const token = jwt.sign(
     {
       id: user.id,
@@ -330,7 +358,6 @@ const login = async (data) => {
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
   )
 
-  // 5. Return token + data user lengkap
   return {
     token,
     user: {

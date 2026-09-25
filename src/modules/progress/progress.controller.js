@@ -2,13 +2,9 @@
 
 const progressService = require('./progress.service')
 
-// ================================================
-// GET PROGRESS — Ambil semua progress guru
-// ================================================
 const getProgress = async (req, res) => {
   try {
     const userId = req.user.id
-
     const progress = await progressService.getProgress(userId)
 
     return res.status(200).json({
@@ -16,7 +12,6 @@ const getProgress = async (req, res) => {
       jumlah: progress.length,
       data: progress
     })
-
   } catch (error) {
     return res.status(500).json({
       sukses: false,
@@ -25,20 +20,15 @@ const getProgress = async (req, res) => {
   }
 }
 
-// ================================================
-// GET SUMMARY — Ringkasan progress semua modul
-// ================================================
 const getSummary = async (req, res) => {
   try {
     const userId = req.user.id
-
     const summary = await progressService.getSummary(userId)
 
     return res.status(200).json({
       sukses: true,
       data: summary
     })
-
   } catch (error) {
     return res.status(500).json({
       sukses: false,
@@ -47,9 +37,6 @@ const getSummary = async (req, res) => {
   }
 }
 
-// ================================================
-// START MODULE — Mulai belajar modul
-// ================================================
 const startModule = async (req, res) => {
   try {
     const userId = req.user.id
@@ -62,7 +49,6 @@ const startModule = async (req, res) => {
       pesan: 'Modul berhasil dimulai',
       data: progress
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -71,9 +57,6 @@ const startModule = async (req, res) => {
   }
 }
 
-// ================================================
-// COMPLETE MODULE — Tandai modul selesai
-// ================================================
 const completeModule = async (req, res) => {
   try {
     const userId = req.user.id
@@ -86,7 +69,6 @@ const completeModule = async (req, res) => {
       pesan: 'Selamat! Modul berhasil diselesaikan 🎉',
       data: progress
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -95,9 +77,6 @@ const completeModule = async (req, res) => {
   }
 }
 
-// ================================================
-// GET PROGRESS BY MODULE — Cek progress satu modul
-// ================================================
 const getProgressByModule = async (req, res) => {
   try {
     const userId = req.user.id
@@ -109,18 +88,15 @@ const getProgressByModule = async (req, res) => {
       sukses: true,
       data: progress
     })
-
   } catch (error) {
-    return res.status(500).json({
+    // Diubah ke 400 Bad Request
+    return res.status(400).json({
       sukses: false,
       pesan: error.message
     })
   }
 }
 
-// ================================================
-// MARK CONTENT COMPLETE — Tandai satu material selesai
-// ================================================
 const markContentComplete = async (req, res) => {
   try {
     const userId = req.user.id
@@ -133,7 +109,6 @@ const markContentComplete = async (req, res) => {
       pesan: 'Material berhasil ditandai selesai',
       data: hasil
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -142,9 +117,6 @@ const markContentComplete = async (req, res) => {
   }
 }
 
-// ================================================
-// UPDATE CONTENT PROGRESS — Update progress material (mis. video)
-// ================================================
 const updateContentProgress = async (req, res) => {
   try {
     const userId = req.user.id
@@ -158,14 +130,17 @@ const updateContentProgress = async (req, res) => {
       })
     }
 
-    const hasil = await progressService.updateContentProgress(userId, contentId, progressPercent)
+    const hasil = await progressService.updateContentProgress(
+      userId,
+      contentId,
+      progressPercent
+    )
 
     return res.status(200).json({
       sukses: true,
       pesan: 'Progress material berhasil diperbarui',
       data: hasil
     })
-
   } catch (error) {
     return res.status(400).json({
       sukses: false,

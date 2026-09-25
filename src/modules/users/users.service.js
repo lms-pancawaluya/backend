@@ -18,6 +18,7 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
     let schoolIdPengajar = currentUser.schoolId
     let sekolahPengajar = currentUser.sekolah
 
+    // Fallback: Ambil dari DB jika tidak ada di objek currentUser / JWT
     if (!schoolIdPengajar && !sekolahPengajar && currentUser.id) {
       const dbPengajar = await prisma.user.findUnique({
         where: { id: currentUser.id },
@@ -108,9 +109,9 @@ const getAllUsers = async (filters = {}, currentUser = {}) => {
 }
 
 // ================================================
-// GET USER BY ID — Ambil detail satu user
+// GET USER BY ID — Ambil detail satu user (dengan Proteksi Scope)
 // ================================================
-const getUserById = async (id) => {
+const getUserById = async (id, currentUser = null) => {
   const user = await prisma.user.findUnique({
     where: { id },
     select: {
@@ -157,6 +158,37 @@ const getUserById = async (id) => {
     throw new Error('User tidak ditemukan')
   }
 
+  // Proteksi Scope Pengajar
+  if (currentUser && currentUser.role === 'pengajar' && currentUser.id !== id) {
+    if (user.role !== 'guru') {
+      throw new Error('Akses ditolak. Pengajar hanya bisa melihat data Guru.')
+    }
+
+    // Ambil data sekolah Pengajar dari DB jika tidak ada di objek currentUser / JWT
+    let schoolIdPengajar = currentUser.schoolId
+    let sekolahPengajar = currentUser.sekolah
+
+    if (!schoolIdPengajar && !sekolahPengajar && currentUser.id) {
+      const dbPengajar = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { schoolId: true, sekolah: true }
+      })
+      schoolIdPengajar = dbPengajar?.schoolId
+      sekolahPengajar = dbPengajar?.sekolah
+    }
+
+    // Pengecekan berbasis schoolId atau nama sekolah secara aman
+    const bedaSekolah = schoolIdPengajar && user.schoolId
+      ? schoolIdPengajar !== user.schoolId
+      : sekolahPengajar && user.sekolah
+      ? sekolahPengajar !== user.sekolah
+      : false
+
+    if (bedaSekolah) {
+      throw new Error('Akses ditolak. Kamu tidak bisa melihat data Guru dari sekolah lain.')
+    }
+  }
+
   return user
 }
 
@@ -174,8 +206,35 @@ const updateUser = async (id, data, currentUser) => {
     throw new Error('User tidak ditemukan')
   }
 
-  if (currentUser && currentUser.role === 'pengajar' && userAda.role !== 'guru') {
-    throw new Error('Akses ditolak. Pengajar hanya bisa mengubah data Guru.')
+  // Enforce Scope Pengajar
+  if (currentUser && currentUser.role === 'pengajar') {
+    if (userAda.role !== 'guru') {
+      throw new Error('Akses ditolak. Pengajar hanya bisa mengubah data Guru.')
+    }
+
+    // Ambil data sekolah Pengajar dari DB jika tidak ada di objek currentUser / JWT
+    let schoolIdPengajar = currentUser.schoolId
+    let sekolahPengajar = currentUser.sekolah
+
+    if (!schoolIdPengajar && !sekolahPengajar && currentUser.id) {
+      const dbPengajar = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { schoolId: true, sekolah: true }
+      })
+      schoolIdPengajar = dbPengajar?.schoolId
+      sekolahPengajar = dbPengajar?.sekolah
+    }
+
+    // Pengecekan berbasis schoolId atau nama sekolah secara aman
+    const bedaSekolah = schoolIdPengajar && userAda.schoolId
+      ? schoolIdPengajar !== userAda.schoolId
+      : sekolahPengajar && userAda.sekolah
+      ? sekolahPengajar !== userAda.sekolah
+      : false
+
+    if (bedaSekolah) {
+      throw new Error('Akses ditolak. Pengajar hanya bisa mengubah data Guru dari sekolah yang sama.')
+    }
   }
 
   const payloadToUpdate = {}
@@ -202,7 +261,6 @@ const updateUser = async (id, data, currentUser) => {
 
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
   
-  // Handling NIP Unique Check
   if (nip !== undefined && nip !== userAda.nip) {
     if (nip) {
       const nipSudahAda = await prisma.user.findUnique({ where: { nip } })
@@ -275,22 +333,23 @@ const updateUser = async (id, data, currentUser) => {
 // UPDATE MY PROFILE
 // ================================================
 const updateMyProfile = async (userId, data, userRole) => {
-  const { nama, email, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp } = data
+  const { nama, email, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp, fotoProfil } = data
 
   const userAda = await prisma.user.findUnique({ where: { id: userId } })
   if (!userAda) throw new Error('User tidak ditemukan')
 
   const payloadToUpdate = {}
 
-  // Poin 4: Jika role adalah 'guru', nama dilarang diubah sendiri
+  // Guru Dilarang Ubah Nama Sendiri
   if (userRole !== 'guru') {
     if (nama) payloadToUpdate.nama = nama
   }
 
   if (gelar !== undefined) payloadToUpdate.gelar = gelar
   if (noHp !== undefined) payloadToUpdate.noHp = noHp
+  if (fotoProfil !== undefined) payloadToUpdate.fotoProfil = fotoProfil
 
-  // Poin 4: Guru dilarang mengubah sekolah secara mandiri
+  // Guru Dilarang Ubah Sekolah Sendiri
   if (userRole !== 'guru') {
     if (schoolId) {
       const masterSekolah = await prisma.masterSekolah.findUnique({

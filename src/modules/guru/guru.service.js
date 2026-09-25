@@ -3,18 +3,21 @@
 const prisma = require('../../config/database')
 
 const findGuruByNip = async (nip) => {
-  if (!nip) return null
+  const cleanNip = String(nip || '').trim()
+  if (!cleanNip) return null
 
   return await prisma.masterGuru.findUnique({
     where: { 
-      nip: String(nip).trim() 
+      nip: cleanNip 
     }
   })
 }
 
 const searchSekolahByName = async (keyword, limit = 10) => {
   const cleanKeyword = String(keyword || '').trim()
-  if (!cleanKeyword) return []
+  
+  // Batasi minimal 3 karakter untuk mencegah beban query database yang berat
+  if (!cleanKeyword || cleanKeyword.length < 3) return []
 
   return await prisma.masterSekolah.findMany({
     where: {

@@ -39,6 +39,7 @@ const getUserById = async (req, res) => {
   try {
     const { id } = req.params
 
+    // Proteksi di Controller
     if (!['admin', 'pengajar'].includes(req.user.role) && req.user.id !== id) {
       return res.status(403).json({
         sukses: false,
@@ -46,7 +47,8 @@ const getUserById = async (req, res) => {
       })
     }
 
-    const user = await usersService.getUserById(id)
+    // TERUSKAN req.user KE SERVICE untuk validasi scope Pengajar
+    const user = await usersService.getUserById(id, req.user)
 
     return res.status(200).json({
       sukses: true,
@@ -54,7 +56,9 @@ const getUserById = async (req, res) => {
     })
 
   } catch (error) {
-    return res.status(404).json({
+    const statusCode = error.message.includes('Akses ditolak') ? 403 : 
+                       error.message.includes('tidak ditemukan') ? 404 : 500
+    return res.status(statusCode).json({
       sukses: false,
       pesan: error.message
     })
@@ -105,7 +109,8 @@ const updateUser = async (req, res) => {
     })
 
   } catch (error) {
-    return res.status(400).json({
+    const statusCode = error.message.includes('Akses ditolak') ? 403 : 400
+    return res.status(statusCode).json({
       sukses: false,
       pesan: error.message
     })
@@ -154,7 +159,7 @@ const deleteUser = async (req, res) => {
 const getMyProfile = async (req, res) => {
   try {
     const userId = req.user.id
-    const user = await usersService.getUserById(userId)
+    const user = await usersService.getUserById(userId, req.user)
 
     return res.status(200).json({
       sukses: true,
@@ -175,7 +180,8 @@ const getMyProfile = async (req, res) => {
 const updateMyProfile = async (req, res) => {
   try {
     const userId = req.user.id
-    const { nama, email, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp } = req.body
+    // Menambahkan fotoProfil di destructuring
+    const { nama, email, gelar, nip, schoolId, sekolah, kotaKab, kecamatan, noHp, fotoProfil } = req.body
 
     const userUpdated = await usersService.updateMyProfile(userId, {
       nama,
@@ -186,7 +192,8 @@ const updateMyProfile = async (req, res) => {
       sekolah,
       kotaKab,
       kecamatan,
-      noHp
+      noHp,
+      fotoProfil // Diteruskan ke service
     }, req.user.role)
 
     return res.status(200).json({
@@ -278,7 +285,7 @@ const adminResetPassword = async (req, res) => {
 }
 
 // ================================================
-// GET NOTIFICATION PREFERENCE (BARU)
+// GET NOTIFICATION PREFERENCE
 // ================================================
 const getNotificationPreference = async (req, res) => {
   try {
@@ -298,7 +305,7 @@ const getNotificationPreference = async (req, res) => {
 }
 
 // ================================================
-// UPDATE NOTIFICATION PREFERENCE (BARU)
+// UPDATE NOTIFICATION PREFERENCE
 // ================================================
 const updateNotificationPreference = async (req, res) => {
   try {

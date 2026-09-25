@@ -13,7 +13,7 @@ const generateOtp = () => {
 }
 
 // ================================================
-// REGISTER — Daftarkan user baru + kirim OTP
+// REGISTER MANDIRI — Daftarkan user baru + kirim OTP
 // ================================================
 const register = async (data) => {
   const { nama, email, password, gelar, nip, schoolId, sekolah, kotaKab, kecamatan } = data
@@ -107,6 +107,87 @@ const register = async (data) => {
   return {
     user: userBaru,
     pesan: 'Registrasi berhasil! Kode OTP telah dikirimkan ke email kamu.'
+  }
+}
+
+// ================================================
+// REGISTER GURU (OLEH ADMIN / PENGAJAR)
+// Auto lookup MasterGuru + Enforce School Scope + Direct Verified
+// ================================================
+const registerGuru = async (data, currentUser) => {
+  const { nip, email, password } = data
+
+  // 1. Validasi input dasar
+  if (!nip || !email || !password) {
+    throw new Error('NIP, email, dan password wajib diisi')
+  }
+
+  if (password.length < 8) {
+    throw new Error('Password minimal 8 karakter')
+  }
+
+  // 2. Cek ketersediaan email
+  const emailExist = await prisma.user.findUnique({ where: { email } })
+  if (emailExist) {
+    throw new Error('Email sudah terdaftar')
+  }
+
+  // 3. Cek ketersediaan NIP pada tabel User
+  const nipExist = await prisma.user.findUnique({ where: { nip: String(nip).trim() } })
+  if (nipExist) {
+    throw new Error('NIP sudah terdaftar pada akun lain')
+  }
+
+  // 4. Lookup data profil dari MasterGuru
+  const masterGuru = await prisma.masterGuru.findUnique({
+    where: { nip: String(nip).trim() }
+  })
+  if (!masterGuru) {
+    throw new Error('Data NIP tidak ditemukan pada Master Guru.')
+  }
+
+  // 5. Penegakan School Scope untuk Pengajar
+  if (currentUser && currentUser.role === 'pengajar') {
+    if (currentUser.schoolId && masterGuru.schoolId && currentUser.schoolId !== masterGuru.schoolId) {
+      throw new Error('Akses ditolak. Pengajar hanya bisa mendaftarkan Guru dari sekolah yang sama.')
+    }
+  }
+
+  // 6. Hash password
+  const hashedPassword = await bcrypt.hash(password, 10)
+
+  // 7. Buat user Guru baru (Langsung isVerified: true)
+  const userBaru = await prisma.user.create({
+    data: {
+      nama: masterGuru.namaGuru || masterGuru.nama,
+      email,
+      password: hashedPassword,
+      role: 'guru',
+      nip: masterGuru.nip,
+      schoolId: masterGuru.schoolId || currentUser?.schoolId || null,
+      sekolah: masterGuru.namaSekolah,
+      kotaKab: masterGuru.kotaKab,
+      kecamatan: masterGuru.kecamatan,
+      isVerified: true
+    },
+    select: {
+      id: true,
+      nama: true,
+      email: true,
+      role: true,
+      nip: true,
+      schoolId: true,
+      sekolah: true,
+      kotaKab: true,
+      kecamatan: true,
+      isVerified: true,
+      createdAt: true
+    }
+  })
+
+  return {
+    user: userBaru,
+    pesan: 'Akun Guru berhasil dibuat.'
   }
 }
 
@@ -293,11 +374,12 @@ const verifyResetOtp = async (data) => {
     throw new Error('Kode OTP sudah kadaluwarsa')
   }
 
+  // Simpan penanda bahwa OTP sudah valid dan perpanjang sesi reset selama 15 menit
   await prisma.user.update({
     where: { email },
     data: {
-      otpCode: null,
-      otpExpiresAt: null
+      otpCode: 'VERIFIED_RESET',
+      otpExpiresAt: new Date(Date.now() + 15 * 60 * 1000)
     }
   })
 
@@ -322,11 +404,20 @@ const resetPassword = async (data) => {
     throw new Error('User tidak ditemukan')
   }
 
+  // Cek validasi penanda OTP sebelum memperbolehkan pergantian password
+  if (user.otpCode !== 'VERIFIED_RESET' || !user.otpExpiresAt || user.otpExpiresAt < new Date()) {
+    throw new Error('Sesi reset password tidak valid atau sudah kadaluwarsa. Silakan lakukan verifikasi OTP ulang.')
+  }
+
   const hashedPassword = await bcrypt.hash(passwordBaru, 10)
 
   await prisma.user.update({
     where: { email },
-    data: { password: hashedPassword }
+    data: { 
+      password: hashedPassword,
+      otpCode: null,
+      otpExpiresAt: null
+    }
   })
 
   return { pesan: 'Password berhasil direset. Silakan login dengan password baru.' }
@@ -360,6 +451,7 @@ const adminResetPassword = async (userId, passwordBaru) => {
 
 module.exports = {
   register,
+  registerGuru,
   verifyOtp,
   resendOtp,
   login,

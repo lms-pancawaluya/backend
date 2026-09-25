@@ -1,3 +1,5 @@
+// src/modules/guru/guru.controller.js
+
 const guruService = require('./guru.service')
 
 const cekNip = async (req, res, next) => {
@@ -6,8 +8,8 @@ const cekNip = async (req, res, next) => {
 
     if (!nip) {
       return res.status(400).json({
-        success: false,
-        message: 'NIP wajib diisi'
+        sukses: false,
+        pesan: 'NIP wajib diisi'
       })
     }
 
@@ -15,14 +17,14 @@ const cekNip = async (req, res, next) => {
 
     if (!guru) {
       return res.status(404).json({
-        success: false,
-        message: 'Data NIP tidak ditemukan di master data. Silakan isi data sekolah secara manual.'
+        sukses: false,
+        pesan: 'Data NIP tidak ditemukan di master data. Silakan isi data sekolah secara manual.'
       })
     }
 
     return res.status(200).json({
-      success: true,
-      message: 'Data NIP berhasil ditemukan',
+      sukses: true,
+      pesan: 'Data NIP berhasil ditemukan',
       data: {
         namaGuru: guru.namaGuru,
         npsnSekolah: guru.npsnSekolah,
@@ -40,9 +42,11 @@ const searchSekolah = async (req, res, next) => {
   try {
     const { q } = req.query
 
-    if (!q) {
+    // Jika keyword kosong atau kurang dari 3 karakter, kembalikan array kosong
+    if (!q || q.trim().length < 3) {
       return res.status(200).json({
-        success: true,
+        sukses: true,
+        pesan: q ? 'Keyword pencarian minimal 3 karakter' : 'Keyword pencarian kosong',
         data: []
       })
     }
@@ -50,8 +54,8 @@ const searchSekolah = async (req, res, next) => {
     const sekolahList = await guruService.searchSekolahByName(q)
 
     return res.status(200).json({
-      success: true,
-      message: 'Berhasil mendapatkan data sekolah',
+      sukses: true,
+      pesan: 'Berhasil mendapatkan data sekolah',
       data: sekolahList
     })
   } catch (error) {

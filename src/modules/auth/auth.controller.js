@@ -4,7 +4,7 @@ const authService = require('./auth.service')
 const usersService = require('../users/users.service')
 
 // ================================================
-// REGISTER
+// REGISTER MANDIRI (GURU REGULER - PAKAI OTP)
 // ================================================
 const register = async (req, res) => {
   try {
@@ -56,6 +56,55 @@ const register = async (req, res) => {
       data: hasil.user
     })
 
+  } catch (error) {
+    return res.status(400).json({
+      sukses: false,
+      pesan: error.message
+    })
+  }
+}
+
+// ================================================
+// REGISTER GURU (OLEH ADMIN / PENGAJAR)
+// Endpoint: POST /api/auth/register-guru
+// ================================================
+const registerGuru = async (req, res) => {
+  try {
+    const { nip, email, password } = req.body
+
+    // Validasi dasar
+    if (!nip || !email || !password) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'NIP, email, dan password wajib diisi'
+      })
+    }
+
+    // Validasi format email
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    if (!emailValid) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Format email tidak valid'
+      })
+    }
+
+    // Validasi panjang password
+    if (password.length < 8) {
+      return res.status(400).json({
+        sukses: false,
+        pesan: 'Password minimal 8 karakter'
+      })
+    }
+
+    // Panggil service dengan meneruskan req.body dan req.user (payload token)
+    const hasil = await authService.registerGuru(req.body, req.user)
+
+    return res.status(201).json({
+      sukses: true,
+      pesan: hasil.pesan,
+      data: hasil.user
+    })
   } catch (error) {
     return res.status(400).json({
       sukses: false,
@@ -284,6 +333,7 @@ const getMe = async (req, res) => {
 
 module.exports = {
   register,
+  registerGuru,
   verifyOtp,
   resendOtp,
   login,

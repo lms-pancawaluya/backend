@@ -4,12 +4,13 @@ const express = require('express')
 const router = express.Router()
 const authController = require('./auth.controller')
 const authMiddleware = require('../../middlewares/auth.middleware')
+const roleMiddleware = require('../../middlewares/role.middleware')
 
 // ================================================
 // PUBLIC ROUTES — Tidak butuh login
 // ================================================
 
-// Register & OTP Verification
+// Register Mandiri (Guru Reguler - Pakai OTP) & Verification
 router.post('/register', authController.register)
 router.post('/verify-otp', authController.verifyOtp)
 router.post('/resend-otp', authController.resendOtp)
@@ -26,10 +27,21 @@ router.post('/reset-password', authController.resetPassword)
 // PROTECTED ROUTES — Butuh login
 // ================================================
 
+// Register Guru (HANYA Oleh Admin / Pengajar)
+router.post('/register-guru', 
+  authMiddleware, 
+  roleMiddleware('admin', 'pengajar'), 
+  authController.registerGuru
+)
+
 // GET /api/auth/me (Get profile user login)
 router.get('/me', authMiddleware, authController.getMe)
 
-// PUT /api/auth/admin/reset-password/:userId (Khusus Admin Reset Password Guru)
-router.put('/admin/reset-password/:userId', authMiddleware, authController.adminResetPassword)
+// PUT /api/auth/admin/reset-password/:userId (HANYA Khusus Admin)
+router.put('/admin/reset-password/:userId', 
+  authMiddleware, 
+  roleMiddleware('admin'), 
+  authController.adminResetPassword
+)
 
 module.exports = router

@@ -2,6 +2,8 @@
 
 RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi menggunakan Node.js, Express, Prisma ORM, PostgreSQL Supabase, autentikasi JWT, email OTP, dan Supabase Storage.
 
+Struktur data pembelajaran mengikuti hierarki **Course → Module → Content**, dengan **Pre-Test** dan **Post-Test** terpasang di level Module serta **mini-quiz** opsional di level Content (video). Course yang seluruh Module-nya selesai dapat diklaim sertifikatnya.
+
 ---
 
 ## 🛠️ Tech Stack & Library
@@ -12,8 +14,9 @@ RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi me
 - **PostgreSQL / Supabase** — database utama serta layanan penyimpanan berkas.
 - **jsonwebtoken** dan **bcryptjs** — token autentikasi dan hashing password.
 - **Resend** — pengiriman OTP registrasi dan reset password.
-- **Multer** — unggahan gambar profil serta dokumen RTL PDF.
-- **Cloudinary** — penyimpanan berkas PDF (modul LMS, template & hasil sertifikat).
+- **Multer** — unggahan gambar profil serta dokumen RTL/PDF modul.
+- **Cloudinary** (`cloudinary`, `multer-storage-cloudinary`) — penyimpanan berkas PDF (modul LMS, template & hasil sertifikat).
+- **exifr** — pembacaan metadata gambar (mis. orientasi EXIF pada foto profil).
 - **pdf-lib** — rendering PDF sertifikat (overlay text pada template).
 - **Helmet** dan **CORS** — keamanan header dan akses lintas origin.
 - **Nodemon** — hot reload saat pengembangan.
@@ -100,9 +103,9 @@ RESTful API untuk **LMS Pancawaluya**, portal pembelajaran guru SMA. Aplikasi me
 
 Role yang tersedia adalah `admin`, `guru`, dan `pengajar`.
 
-- **Admin** mengelola pengguna, modul, konten, evaluasi, monitoring, submission RTL, dan tiket bantuan.
-- **Guru** mempelajari modul, mengerjakan kuis/evaluasi, mengirim komentar, mengunggah RTL, dan membuat tiket bantuan.
-- **Pengajar** meninjau RTL, memantau data pengguna, menangani tiket bantuan, serta mengakses riwayat dan pengerjaan mini kuis bersama guru.
+- **Admin** mengelola pengguna, course, modul, konten, evaluasi, sertifikat, monitoring, submission RTL, diskusi, dan tiket bantuan.
+- **Guru** mempelajari course/modul, mengerjakan pre-test/post-test/mini-quiz, mengklaim sertifikat, mengirim komentar, mengunggah RTL, dan membuat tiket bantuan.
+- **Pengajar** turut mengelola course & modul, meninjau RTL, memantau data pengguna sekolahnya, menangani tiket bantuan, serta mengakses riwayat dan pengerjaan mini kuis bersama guru.
 
 Setiap endpoint yang tidak berlabel **Publik** membutuhkan JWT valid.
 
@@ -134,10 +137,12 @@ Parameter seperti `:id`, `:moduleId`, `:contentId`, `:questionId`, `:userId`, `:
   *Deskripsi:* Memverifikasi OTP reset password.
 - `POST /api/auth/reset-password` `(Publik)`
   *Deskripsi:* Mengganti password setelah verifikasi reset.
+- `POST /api/auth/register-guru` `(Admin atau Pengajar)`
+  *Deskripsi:* Mendaftarkan akun guru secara langsung oleh Admin/Pengajar (tanpa alur OTP mandiri).
 - `GET /api/auth/me` `(Terautentikasi)`
   *Deskripsi:* Mengambil data pengguna dari token terverifikasi.
-- `PUT /api/auth/admin/reset-password/:userId` `(Terautentikasi)`
-  *Deskripsi:* Mereset password pengguna berdasarkan ID; route ini tidak memasang pembatasan role admin.
+- `PUT /api/auth/admin/reset-password/:userId` `(Admin)`
+  *Deskripsi:* Mereset password pengguna berdasarkan ID.
 
 ### Pengguna — `/api/users`
 
@@ -149,6 +154,10 @@ Parameter seperti `:id`, `:moduleId`, `:contentId`, `:questionId`, `:userId`, `:
   *Deskripsi:* Memperbarui profil sendiri. Role `guru` tidak dapat mengubah `sekolah`, `kotaKab`, dan `kecamatan`.
 - `PUT /api/users/profile/me/password` `(Terautentikasi)`
   *Deskripsi:* Mengganti password pengguna saat ini.
+- `GET /api/users/profile/me/notification-preference` `(Terautentikasi)`
+  *Deskripsi:* Mengambil preferensi notifikasi pengguna saat ini.
+- `PATCH /api/users/profile/me/notification-preference` `(Terautentikasi)`
+  *Deskripsi:* Memperbarui preferensi notifikasi pengguna saat ini.
 - `GET /api/users/:id` `(Terautentikasi)`
   *Deskripsi:* Mengambil detail pengguna; admin dan pengajar dapat melihat semua pengguna, guru hanya dapat melihat dirinya sendiri.
 - `PUT /api/users/:id` `(Admin atau Pengajar)`
@@ -158,17 +167,34 @@ Parameter seperti `:id`, `:moduleId`, `:contentId`, `:questionId`, `:userId`, `:
 - `PUT /api/users/:id/reset-password` `(Admin)`
   *Deskripsi:* Mereset password pengguna.
 
+### Course — `/api/courses`
+
+Course adalah entitas pembungkus di atas Module (`Course` → `Module` → `Content`). Course dapat berupa pelatihan `online` atau `offline` (dengan `lokasi`, `tanggalMulai`, `tanggalSelesai`), boleh dibatasi ke satu sekolah (`schoolId`) atau bersifat global, dan menyimpan konfigurasi sertifikat (`hasCertificate`, template).
+
+- `GET /api/courses/` `(Terautentikasi)`
+  *Deskripsi:* Mengambil daftar course beserta progres pengguna saat ini. Mendukung query `mode` (`online`/`offline`). Guru dan Pengajar hanya melihat course global atau course milik sekolahnya; Admin melihat semua course.
+- `GET /api/courses/:id` `(Terautentikasi)`
+  *Deskripsi:* Mengambil detail satu course beserta daftar modul di dalamnya.
+- `POST /api/courses/` `(Admin atau Pengajar)`
+  *Deskripsi:* Membuat course baru.
+- `PUT /api/courses/:id` `(Admin atau Pengajar)`
+  *Deskripsi:* Memperbarui course.
+- `DELETE /api/courses/:id` `(Admin atau Pengajar)`
+  *Deskripsi:* Menghapus course.
+
+> **Catatan konsistensi:** controller Course saat ini mengembalikan envelope `{ success, message, data }` (Bahasa Inggris), berbeda dari envelope `{ sukses, pesan, data }` yang dipakai modul lain. Perbedaan ini nyata di kode; perlu diselaraskan pada task berikutnya.
+
 ### Modul Pembelajaran — `/api/modules`
 
 - `GET /api/modules/` `(Terautentikasi)`
   *Deskripsi:* Mengambil semua modul.
 - `GET /api/modules/:id` `(Terautentikasi)`
   *Deskripsi:* Mengambil detail modul.
-- `POST /api/modules/` `(Admin)`
-  *Deskripsi:* Membuat modul pembelajaran.
-- `PUT /api/modules/:id` `(Admin)`
+- `POST /api/modules/` `(Admin atau Pengajar)`
+  *Deskripsi:* Membuat modul pembelajaran. Body wajib: `courseId`, `judul`, `deskripsi`, `urutan` (modul selalu terikat ke sebuah Course).
+- `PUT /api/modules/:id` `(Admin atau Pengajar)`
   *Deskripsi:* Memperbarui modul.
-- `DELETE /api/modules/:id` `(Admin)`
+- `DELETE /api/modules/:id` `(Admin atau Pengajar)`
   *Deskripsi:* Menghapus modul.
 
 ### Konten Modul — `/api/contents`
@@ -486,25 +512,35 @@ Endpoint menggunakan `multipart/form-data`; format yang diterima adalah JPEG, PN
   *Deskripsi:* Mengunggah gambar profil melalui field `foto`, lalu memperbarui `fotoProfil` pengguna. Batas fitur profil adalah 5 MB.
 - `POST /api/upload/rtl` `(Terautentikasi)`
   *Deskripsi:* Mengunggah dokumen RTL PDF melalui field `file` ke bucket `rtl-files`; batas ukuran Multer saat ini 10 MB.
+- `POST /api/upload/pdf` `(Terautentikasi)`
+  *Deskripsi:* Mengunggah dokumen PDF modul LMS melalui field `file` ke Cloudinary (terpisah dari upload sertifikat).
 
 > **Catatan implementasi:** Multer saat ini memakai batas global 10 MB. Karena itu, batas 5 MB untuk foto profil belum diterapkan secara terpisah pada source.
 
 ### Umpan Balik — `/api/feedbacks`
 
-- `POST /api/feedbacks/module/:moduleId` `(Terautentikasi)`
-  *Deskripsi:* Mengirim saran dan kritik untuk modul.
+Scope umpan balik sudah dipindah dari Module ke **Course** (`moduleId` dipertahankan sebagai field body opsional untuk kompatibilitas data lama).
+
+- `POST /api/feedbacks/course/:courseId` `(Terautentikasi)`
+  *Deskripsi:* Mengirim saran dan masukan untuk sebuah course. Body: `{ saran, masukan, moduleId? }`.
 - `GET /api/feedbacks/` `(Admin)`
-  *Deskripsi:* Mengambil seluruh saran dan kritik modul.
+  *Deskripsi:* Mengambil seluruh saran dan masukan dari guru.
 
-### Monitoring — `/api/admin`
+### Monitoring — `/api/admin-monitoring`
 
-- `GET /api/admin/users/:userId/progress` `(Admin atau Pengajar)`
+> **Koreksi path:** endpoint ini ter-mount di `/api/admin-monitoring`, bukan `/api/admin`.
+
+- `GET /api/admin-monitoring/users/progress/all` `(Admin atau Pengajar)`
+  *Deskripsi:* Mengambil progress belajar seluruh guru dalam satu request (dipakai untuk ringkasan/donut monitoring). Untuk Pengajar, hasil dibatasi ke sekolahnya.
+- `GET /api/admin-monitoring/users/:userId/progress` `(Admin atau Pengajar)`
   *Deskripsi:* Mengambil progress modul seorang pengguna.
-- `GET /api/admin/users/:userId/evaluations` `(Admin atau Pengajar)`
+- `GET /api/admin-monitoring/users/:userId/evaluations` `(Admin atau Pengajar)`
   *Deskripsi:* Mengambil data evaluasi seorang pengguna.
 
 ### Helpdesk — `/api/helpdesk`
 
+- `GET /api/helpdesk/tickets/categories` `(Terautentikasi)`
+  *Deskripsi:* Mengambil daftar kategori tiket bantuan yang tersedia.
 - `POST /api/helpdesk/tickets` `(Terautentikasi)`
   *Deskripsi:* Membuat tiket bantuan.
 - `GET /api/helpdesk/tickets/my` `(Terautentikasi)`
@@ -518,14 +554,47 @@ Endpoint menggunakan `multipart/form-data`; format yang diterima adalah JPEG, PN
 - `POST /api/helpdesk/tickets/:ticketId/replies` `(Pemilik tiket, Admin, atau Pengajar)`
   *Deskripsi:* Menambahkan balasan pada tiket.
 
-### Komentar Modul — `/api/comments`
+### Diskusi / Komentar — `/api/comments`
 
+Komentar dapat terikat pada `courseId` maupun `moduleId` (nested reply via `parentId`), dengan dukungan mention pengguna lain.
+
+- `GET /api/comments/users/search` `(Terautentikasi)`
+  *Deskripsi:* Mencari pengguna untuk autocomplete `@mention` saat menulis komentar.
 - `POST /api/comments` `(Terautentikasi)`
-  *Deskripsi:* Mengirim komentar yang terikat pada `moduleId`.
+  *Deskripsi:* Mengirim komentar. Body: `{ courseId?, moduleId?, isi, parentId?, mentionedUserIds? }`.
+- `GET /api/comments/` `(Terautentikasi)`
+  *Deskripsi:* Mengambil komentar via query string `?courseId=` atau `?moduleId=`.
+- `GET /api/comments/course/:courseId` `(Terautentikasi)`
+  *Deskripsi:* Mengambil komentar pada sebuah course.
 - `GET /api/comments/module/:moduleId` `(Terautentikasi)`
   *Deskripsi:* Mengambil komentar modul dengan urutan terbaru terlebih dahulu.
 - `DELETE /api/comments/:id` `(Pemilik komentar atau Admin)`
   *Deskripsi:* Menghapus komentar milik sendiri; admin dapat menghapus komentar apa pun.
+
+### Notifikasi — `/api/notifications`
+
+- `GET /api/notifications/` `(Terautentikasi)`
+  *Deskripsi:* Mengambil daftar notifikasi pengguna saat ini.
+- `GET /api/notifications/unread-count` `(Terautentikasi)`
+  *Deskripsi:* Mengambil jumlah notifikasi belum dibaca.
+- `PATCH /api/notifications/read-all` `(Terautentikasi)`
+  *Deskripsi:* Menandai seluruh notifikasi sebagai sudah dibaca.
+- `PATCH /api/notifications/:id/read` `(Terautentikasi)`
+  *Deskripsi:* Menandai satu notifikasi sebagai sudah dibaca.
+
+### Pencarian Global — `/api/search`
+
+- `GET /api/search/?q=` `(Terautentikasi)`
+  *Deskripsi:* Pencarian global lintas menu/fitur statis, modul, konten, dan tiket helpdesk milik pengguna (guru hanya melihat tiketnya sendiri). Query kosong mengembalikan seluruh kategori dalam keadaan kosong.
+
+### Data Guru & Sekolah (Master Data) — `/api/guru`
+
+Dipakai untuk membantu pengisian otomatis form registrasi guru dari master data Dinas Pendidikan Jawa Barat.
+
+- `GET /api/guru/cek-nip/:nip` `(Publik)`
+  *Deskripsi:* Mencari data guru berdasarkan NIP pada master data; mengembalikan nama, NPSN, nama sekolah, kota/kabupaten, dan kecamatan bila ditemukan.
+- `GET /api/guru/cari-sekolah?q=` `(Publik)`
+  *Deskripsi:* Mencari sekolah berdasarkan nama (minimal 3 karakter).
 
 ---
 
